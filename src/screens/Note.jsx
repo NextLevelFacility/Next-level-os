@@ -6,7 +6,7 @@ import { useAuth } from '../lib/auth.jsx'
 
 export default function Note() {
   const { slug } = useParams()
-  const { user, role } = useAuth()
+  const { user, roles: role } = useAuth()
   const note = noteBySlug(slug)
   const [readAt, setReadAt] = useState(null)
   const [readers, setReaders] = useState([])

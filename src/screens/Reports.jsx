@@ -17,13 +17,13 @@ export const REPORT_TYPES = {
 }
 
 export default function Reports() {
-  const { user, role, locationId } = useAuth()
+  const { user, role, roles, locationId } = useAuth()
   const [kind, setKind] = useState(null)
   const [data, setData] = useState({})
   const [mine, setMine] = useState([])
   const [msg, setMsg] = useState('')
 
-  const available = Object.entries(REPORT_TYPES).filter(([, t]) => t.roles.includes('*') || t.roles.includes(role) || isManager(role))
+  const available = Object.entries(REPORT_TYPES).filter(([, t]) => t.roles.includes('*') || t.roles.some(r => roles.includes(r)) || isManager(roles))
   async function load() {
     const { data } = await supabase.from('reports').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10)
     setMine(data || [])

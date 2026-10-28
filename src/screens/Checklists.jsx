@@ -5,7 +5,7 @@ import { supabase, isManager } from '../lib/supabase'
 const today = () => new Date().toISOString().slice(0, 10)
 
 export default function Checklists() {
-  const { user, role, locationId } = useAuth()
+  const { user, role, roles, locationId } = useAuth()
   const [templates, setTemplates] = useState([])
   const [allTemplates, setAllTemplates] = useState([])
   const [runs, setRuns] = useState({})
@@ -14,12 +14,12 @@ export default function Checklists() {
 
   async function load() {
     const { data: t } = await supabase.from('checklist_templates').select('*').order('slot')
-    setTemplates((t || []).filter(x => x.active && (!x.role || x.role === role || isManager(role))))
+    setTemplates((t || []).filter(x => x.active && (!x.role || roles.includes(x.role) || isManager(roles))))
     setAllTemplates(t || [])
     const { data: r } = await supabase.from('checklist_runs').select('*').eq('run_date', today()).eq('location_id', locationId)
     setRuns(Object.fromEntries((r || []).map(x => [x.template_id, x])))
   }
-  useEffect(() => { load() }, [role, locationId])
+  useEffect(() => { load() }, [roles.join(','), locationId])
 
   async function toggle(t, idx, photoFile) {
     const run = runs[t.id] || { template_id: t.id, location_id: locationId, user_id: user.id, run_date: today(), completed: {} }

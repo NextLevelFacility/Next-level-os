@@ -34,6 +34,7 @@ export function AuthProvider({ children }) {
     session, profile, locations,
     user: session?.user || null,
     role: profile?.role || 'newhire',
+    roles: [...new Set([profile?.role || 'newhire', ...(profile?.roles || [])])],
     locationId: profile?.location_id || null,
     refresh: () => loadProfile(session?.user),
     signOut: () => supabase.auth.signOut(),

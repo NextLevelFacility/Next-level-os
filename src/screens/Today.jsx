@@ -8,7 +8,7 @@ import Goals from '../components/Goals.jsx'
 import ClinicBoard from '../components/ClinicBoard.jsx'
 
 export default function Today() {
-  const { profile, role, locationId, user } = useAuth()
+  const { profile, role, roles, locationId, user } = useAuth()
   const [templates, setTemplates] = useState([])
   const [runs, setRuns] = useState([])
   const [reads, setReads] = useState(new Set())
@@ -21,7 +21,7 @@ export default function Today() {
   useEffect(() => {
     (async () => {
       const { data: t } = await supabase.from('checklist_templates').select('*').eq('active', true)
-      setTemplates((t || []).filter(x => !x.role || x.role === role || isManager(role)))
+      setTemplates((t || []).filter(x => !x.role || roles.includes(x.role) || isManager(roles)))
       const { data: r } = await supabase.from('checklist_runs').select('*').eq('run_date', today()).eq('location_id', locationId)
       setRuns(r || [])
       const { data: rd } = await supabase.from('sop_reads').select('sop_path').eq('user_id', user.id)
@@ -31,7 +31,7 @@ export default function Today() {
       if (h) { const { data: tk } = await supabase.from('onboarding_tasks').select('*').eq('hire_id', h.id).order('sort'); setTasks(tk || []) }
       const { count } = await supabase.from('reports').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('report_date', today())
       setReportsToday(count || 0)
-      if (isCoach(role)) {
+      if (isCoach(roles)) {
         const { data: s } = await supabase.from('sessions').select('id, start_time, session_type, session_athletes(count)').eq('session_date', today()).eq('coach_id', user.id).order('start_time')
         setSessionsToday(s || [])
         const { data: m } = await supabase.from('modules').select('id').eq('published', true)
@@ -39,9 +39,9 @@ export default function Today() {
         setModules({ total: (m || []).length, done: (p || []).filter(x => (m || []).some(mm => mm.id === x.module_id)).length })
       }
     })()
-  }, [role, locationId, user.id])
+  }, [roles.join(','), locationId, user.id])
 
-  const mySops = sops().filter(n => roleMatches(n, role))
+  const mySops = sops().filter(n => roleMatches(n, roles))
   const unread = mySops.filter(n => !reads.has(n.path))
   const openChecklists = templates.filter(t => !runs.find(r => r.template_id === t.id && r.done))
   const hour = new Date().getHours()
@@ -50,7 +50,7 @@ export default function Today() {
   return (
     <>
       <h1>{greet}, {(profile.full_name || '').split(' ')[0]}</h1>
-      <p className="muted">{ROLES[role]} · {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+      <p className="muted">{roles.map(r => ROLES[r]).join(' + ')} · {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
 
       <Goals />
       <Clock />
@@ -67,7 +67,7 @@ export default function Today() {
         </div>
       )}
 
-      {isCoach(role) && (
+      {isCoach(roles) && (
         <div className="card">
           <div className="row between"><h2>Sessions</h2><Link to="/athletes" className="small">Athletes</Link></div>
           {sessionsToday.length === 0 ? <p className="muted">No sessions logged yet today.</p> : (
@@ -115,13 +115,15 @@ export default function Today() {
   )
 }
 
-export function roleMatches(note, role) {
+export function roleMatches(note, roles) {
+  const list = Array.isArray(roles) ? roles : [roles]
   const t = note.tags
-  if (isManager(role)) return true
-  if (isCoach(role)) return t.includes('coaching') || t.includes('people') || t.includes('onboarding') || /coach|standard|belief|culture|method/i.test(note.title)
-  if (role === 'sales') return t.includes('sales') || /sales|member|belief|culture|standard/i.test(note.title)
-  if (role === 'frontdesk') return /facility|front desk|member experience|belief|culture|standard/i.test(note.title)
-  return /belief|standard|culture|onboarding/i.test(note.title)
+  if (isManager(list)) return true
+  if (/belief|standard|culture|onboarding/i.test(note.title)) return true
+  if (isCoach(list) && (t.includes('coaching') || t.includes('people') || /coach|method/i.test(note.title))) return true
+  if (list.includes('sales') && (t.includes('sales') || /sales|member/i.test(note.title))) return true
+  if (list.includes('frontdesk') && /facility|front desk|member experience/i.test(note.title)) return true
+  return false
 }
 
 export function Progress({ tasks }) {

@@ -25,7 +25,7 @@ export default function Dashboard() {
         scope(supabase.from('checklist_runs').select('*')).eq('run_date', today()),
         supabase.from('checklist_templates').select('id, name, slot, role').eq('active', true),
         scope(supabase.from('hires').select('*, onboarding_tasks(done)')).neq('status', 'complete'),
-        scope(supabase.from('profiles').select('id, full_name, role, location_id')),
+        scope(supabase.from('profiles').select('id, full_name, role, roles, location_id')),
         supabase.from('kpi_goals').select('*').eq('active', true).order('sort'),
         scope(supabase.from('kpi_days').select('*')).eq('kpi_date', today()),
         scope(supabase.from('time_entries').select('*, profiles(full_name)')).gte('clock_in', weekStart()),
@@ -42,10 +42,12 @@ export default function Dashboard() {
   const incidents = d.reports.filter(r => r.kind === 'incident')
   const onClock = d.time.filter(t => !t.clock_out)
   const kpiOf = uid => d.kpis.find(k => k.user_id === uid)?.data || {}
-  const goalRows = d.people.filter(p => ['sales', 'frontdesk', 'coach', 'director'].includes(p.role)).map(p => {
-    const gs = d.goals.filter(g => g.role === p.role); const data = kpiOf(p.id)
-    return { p, gs, data, hit: gs.filter(g => (Number(data[g.metric]) || 0) >= Number(g.goal)).length }
-  })
+  const goalRows = d.people.map(p => {
+    const rs = [p.role, ...(p.roles || [])].filter(r => ['sales', 'frontdesk', 'coach', 'director'].includes(r))
+    const seen = {}; for (const g of d.goals.filter(g => rs.includes(g.role))) { if (!seen[g.metric] || Number(g.goal) > Number(seen[g.metric].goal)) seen[g.metric] = g }
+    const gs = Object.values(seen); const data = kpiOf(p.id)
+    return { p, rs, gs, data, hit: gs.filter(g => (Number(data[g.metric]) || 0) >= Number(g.goal)).length }
+  }).filter(r => r.gs.length)
   const sessions7 = d.sessions.length, athletes7 = d.sessions.reduce((a, s) => a + (s.session_athletes?.[0]?.count || 0), 0)
 
   return (
@@ -92,10 +94,10 @@ export default function Dashboard() {
       <div className="card">
         {goalRows.length === 0 ? <p className="muted">No one with daily goals yet. Set roles on the Team page.</p> : (
           <ul className="list">
-            {goalRows.map(({ p, gs, data, hit }) => (
+            {goalRows.map(({ p, rs, gs, data, hit }) => (
               <li key={p.id} style={{ alignItems: 'flex-start' }}>
                 <span className={`pill ${hit === gs.length && gs.length ? 'good' : hit > 0 ? 'gold' : ''}`}>{hit}/{gs.length}</span>
-                <span className="grow"><div style={{ fontWeight: 600 }}>{p.full_name} <span className="muted small">· {ROLES[p.role]}</span></div>
+                <span className="grow"><div style={{ fontWeight: 600 }}>{p.full_name} <span className="muted small">· {rs.map(r => ROLES[r]).join(' + ')}</span></div>
                   <div className="row wrap small" style={{ gap: 8, marginTop: 2 }}>{gs.map(g => { const v = Number(data[g.metric]) || 0, ok = v >= Number(g.goal); return <span key={g.id} style={{ color: ok ? 'var(--good)' : 'var(--muted)' }}>{ok ? '✓' : '○'} {g.label}: {g.kind === 'check' ? (ok ? 'done' : 'not yet') : `${v}/${g.goal}`}</span> })}</div>
                 </span>
               </li>

@@ -16,9 +16,11 @@ export const ROLES = {
   newhire: 'New hire',
 }
 
-export const isManager = (role) => role === 'owner' || role === 'operator'
-export const isDirector = (role) => isManager(role) || role === 'director'
-export const isCoach = (role) => isDirector(role) || role === 'coach'
+const asList = (r) => Array.isArray(r) ? r : [r]
+export const hasRole = (roles, r) => asList(roles).includes(r)
+export const isManager = (roles) => asList(roles).some(r => r === 'owner' || r === 'operator')
+export const isDirector = (roles) => isManager(roles) || hasRole(roles, 'director')
+export const isCoach = (roles) => isDirector(roles) || hasRole(roles, 'coach')
 
 export const FOCUS_AREAS = [
   'FIRST TOUCH', 'PASSING ACCURACY', 'SPEED OF PLAY', 'AGILITY / FOOTWORK',

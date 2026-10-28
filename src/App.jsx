@@ -40,7 +40,7 @@ export const icons = {
 }
 
 export default function App() {
-  const { session, profile, role, signOut } = useAuth()
+  const { session, profile, role, roles, signOut } = useAuth()
   const [more, setMore] = useState(false)
   const loc = useLocation()
 
@@ -49,8 +49,8 @@ export default function App() {
   if (!session) return <Login />
   if (!profile) return <div className="auth"><p className="muted">Setting up your profile…</p></div>
 
-  const manager = isManager(role), coach = isCoach(role)
-  // Primary tabs (4) + More. Everything else lives in More.
+  const manager = isManager(roles), coach = isCoach(roles)
+  // Primary tabs (4) + More. People with two roles get the union, in priority order.
   const all = {
     today: ['/', 'Today', icons.today],
     athletes: ['/athletes', 'Athletes', icons.athletes],
@@ -65,12 +65,15 @@ export default function App() {
     clinics: ['/clinics', 'Clinics', icons.clinics],
     settings: ['/settings', 'You', icons.settings],
   }
-  let primary, extra
-  if (manager) { primary = ['today', 'ceo', 'athletes', 'ask']; extra = ['clinics', 'method', 'playbook', 'checklists', 'reports', 'hires', 'team', 'settings'] }
-  else if (coach) { primary = ['today', 'athletes', 'method', 'ask']; extra = ['clinics', 'playbook', 'checklists', 'reports', 'team', 'settings'] }
-  else if (role === 'sales') { primary = ['today', 'clinics', 'reports', 'ask']; extra = ['playbook', 'checklists', 'team', 'settings'] }
-  else if (role === 'newhire') { primary = ['today', 'hires', 'playbook', 'ask']; extra = ['clinics', 'checklists', 'reports', 'team', 'settings'] }
-  else { primary = ['today', 'checklists', 'clinics', 'ask']; extra = ['reports', 'playbook', 'team', 'settings'] }
+  const wants = ['today']
+  if (manager) wants.push('ceo', 'athletes')
+  if (coach) wants.push('athletes', 'method')
+  if (roles.includes('sales')) wants.push('clinics', 'reports')
+  if (roles.includes('frontdesk')) wants.push('checklists', 'clinics')
+  if (role === 'newhire') wants.push('hires', 'playbook')
+  wants.push('ask', 'clinics', 'playbook', 'checklists', 'reports', 'method', 'hires', 'team', 'settings')
+  const ordered = [...new Set(wants)].filter(k => k !== 'hires' || manager || role === 'newhire').filter(k => k !== 'ceo' || manager).filter(k => k !== 'method' || coach)
+  const primary = ordered.slice(0, 4), extra = ordered.slice(4)
   const isExtraActive = extra.some(k => loc.pathname.startsWith(all[k][0]) && all[k][0] !== '/')
 
   const Tab = ({ k }) => { const [to, label, d] = all[k]; return <NavLink to={to} end={to === '/'} onClick={() => setMore(false)} className={({ isActive }) => isActive ? 'active' : ''}><Icon d={d} /><span>{label}</span></NavLink> }

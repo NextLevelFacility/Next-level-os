@@ -43,7 +43,7 @@ export default function HireDetail() {
   async function linkMe() { await supabase.from('hires').update({ user_id: user.id }).eq('id', id); load() }
 
   if (!hire) return <p className="muted">Loading…</p>
-  const buddy = people[hire.buddy_id], mgr = people[hire.manager_id]
+  const mgr = people[hire.manager_id]
   const isMe = hire.user_id === user.id
 
   return (
@@ -65,11 +65,8 @@ export default function HireDetail() {
       </div>
 
       <div className="card">
-        <h2>Your people</h2>
-        <ul className="list">
-          <li><span className="pill gold">Buddy</span><span className="grow">{buddy ? <>{buddy.full_name}{buddy.phone && <> · <a href={`tel:${buddy.phone}`}>{buddy.phone}</a></>}</> : <span className="muted">not assigned</span>}</span></li>
-          <li><span className="pill gold">Manager</span><span className="grow">{mgr ? mgr.full_name : <span className="muted">not assigned</span>}</span></li>
-        </ul>
+        <h2>Your manager</h2>
+        <p>{mgr ? <>{mgr.full_name}{mgr.phone && <> · <a href={`tel:${mgr.phone}`}>{mgr.phone}</a></>}</> : <span className="muted">not assigned</span>}</p>
       </div>
 
       {manager && (
@@ -90,7 +87,7 @@ export default function HireDetail() {
             <h2>{label}</h2>
             <ul className="list">
               {list.map(t => {
-                const canTick = manager || (isMe && t.owner === 'hire') || (t.owner === 'buddy' && hire.buddy_id === user.id)
+                const canTick = manager || (isMe && t.owner === 'hire') || hire.manager_id === user.id
                 return (
                   <li key={t.id}>
                     <button className={`check ${t.done ? 'on' : ''}`} disabled={!canTick} onClick={() => toggle(t)}>{t.done ? '✓' : ''}</button>

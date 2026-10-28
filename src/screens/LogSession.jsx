@@ -10,7 +10,7 @@ export default function LogSession() {
   const { id } = useParams()
   const [params] = useSearchParams()
   const nav = useNavigate()
-  const { user, role, locationId, profile } = useAuth()
+  const { user, roles: role, locationId, profile } = useAuth()
   const editing = Boolean(id)
   const [roster, setRoster] = useState([])
   const [coaches, setCoaches] = useState([])

@@ -1,5 +1,5 @@
 // The default 30/60/90 plan, built on the 5 C's. Every new hire gets these tasks created automatically.
-// c: compliance | clarity | culture | connection | checkback
+// c: compliance | clarity | culture | connection | checkback  (connection = shadowing every seat)
 export const DEFAULT_PLAN = [
   // Compliance — before Day 1 (owner: operator)
   { phase: 'compliance', c: 'compliance', owner: 'operator', text: 'Offer letter signed, pay and schedule confirmed' },
@@ -9,10 +9,9 @@ export const DEFAULT_PLAN = [
   { phase: 'compliance', c: 'compliance', owner: 'operator', text: 'Logins created: Next Level OS, PushPress, GoHighLevel, ADP coach PIN, team chat' },
   { phase: 'compliance', c: 'compliance', owner: 'operator', text: 'Next Level gear in their size ready for Day 1' },
   { phase: 'compliance', c: 'clarity', owner: 'manager', text: 'Write the three problems this hire is here to solve' },
-  { phase: 'compliance', c: 'connection', owner: 'manager', text: 'Assign a buddy who is not their manager' },
 
   // Week 1 — learn the system
-  { phase: 'week1', c: 'culture', owner: 'hire', text: 'Day 1: tour, gear, meet your buddy' },
+  { phase: 'week1', c: 'culture', owner: 'hire', text: 'Day 1: tour, gear, meet the team' },
   { phase: 'week1', c: 'culture', owner: 'hire', text: 'Read Core Beliefs (all eight)' },
   { phase: 'week1', c: 'culture', owner: 'hire', text: 'Read The Next Level Standard' },
   { phase: 'week1', c: 'culture', owner: 'hire', text: 'Read Culture Code and Brand Story' },

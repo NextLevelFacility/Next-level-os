@@ -9,7 +9,7 @@ export default function Onboarding() {
   const [hires, setHires] = useState([])
   const [people, setPeople] = useState([])
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ full_name: '', role: 'coach', start_date: '', buddy_id: '', manager_id: user.id, location_id: locationId || '' })
+  const [form, setForm] = useState({ full_name: '', role: 'coach', start_date: '', manager_id: user.id, location_id: locationId || '' })
   const manager = isManager(role)
 
   async function load() {
@@ -24,7 +24,7 @@ export default function Onboarding() {
     e.preventDefault()
     const { data: h, error } = await supabase.from('hires').insert({
       full_name: form.full_name, role: form.role, start_date: form.start_date || null,
-      buddy_id: form.buddy_id || null, manager_id: form.manager_id || null, location_id: form.location_id || null,
+      manager_id: form.manager_id || null, location_id: locationId || null,
     }).select().single()
     if (error) return alert(error.message)
     await supabase.from('onboarding_tasks').insert(DEFAULT_PLAN.map(t => ({ ...t, hire_id: h.id })))
@@ -34,7 +34,7 @@ export default function Onboarding() {
   return (
     <>
       <div className="row between"><h1>Onboarding</h1>{manager && <button className="btn small" onClick={() => setShowForm(!showForm)}>+ Add hire</button>}</div>
-      <p className="muted">The 5 C's: Compliance, Clarity, Culture, Connection, Check-back. Every hire, every location, the same path.</p>
+      <p className="muted">The 5 C's: Compliance, Clarity, Culture, Connection (shadow every seat), Check-back. Every hire, every location, the same path.</p>
 
       {showForm && (
         <form className="card accent" onSubmit={addHire}>
@@ -45,14 +45,6 @@ export default function Onboarding() {
               {Object.entries(ROLES).filter(([k]) => k !== 'owner' && k !== 'newhire').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select></label>
           <label className="field"><span>Start date</span><input className="input" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} /></label>
-          <label className="field"><span>Location</span>
-            <select className="input" value={form.location_id} onChange={e => setForm({ ...form, location_id: e.target.value })}>
-              {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select></label>
-          <label className="field"><span>Buddy (not their manager)</span>
-            <select className="input" value={form.buddy_id} onChange={e => setForm({ ...form, buddy_id: e.target.value })}>
-              <option value="">Pick later</option>{people.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-            </select></label>
           <label className="field"><span>Manager</span>
             <select className="input" value={form.manager_id} onChange={e => setForm({ ...form, manager_id: e.target.value })}>
               {people.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../lib/auth.jsx'
-import { supabase, ROLES, isManager, hours, fmtTime } from '../lib/supabase'
+import { supabase, ROLES, isManager, isCoach, hours, fmtTime } from '../lib/supabase'
 import { money } from '../lib/api'
 import { sops } from '../lib/vault'
 import { roleMatches } from './Today.jsx'
@@ -74,7 +74,7 @@ export default function Team() {
       {tab === 'people' && <>
         <p className="muted">Every seat, who sits in it, and where. {manager && 'Tap a role or location to change it.'}</p>
         {people.map(p => {
-          const need = sops().filter(n => roleMatches(n, p.role)).length, have = reads.filter(r => r.user_id === p.id).length
+          const need = sops().filter(n => roleMatches(n, [p.role, ...(p.roles || [])])).length, have = reads.filter(r => r.user_id === p.id).length
           const md = modsDone.filter(m => m.user_id === p.id).length
           return (
             <div className="card" key={p.id}>
@@ -85,14 +85,20 @@ export default function Team() {
                     <select className="input" style={{ width: 'auto', minHeight: 36, padding: '6px 10px' }} value={p.role} onChange={e => update(p.id, { role: e.target.value })}>{Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
                     <select className="input" style={{ width: 'auto', minHeight: 36, padding: '6px 10px' }} value={p.location_id || ''} onChange={e => update(p.id, { location_id: e.target.value })}>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
                   </div>
-                ) : <div className="row" style={{ gap: 6 }}><span className="pill pink">{ROLES[p.role]}</span><span className="pill">{locName(p.location_id)}</span></div>}
+                ) : <div className="row wrap" style={{ gap: 6 }}><span className="pill pink">{ROLES[p.role]}</span>{(p.roles || []).map(r => <span key={r} className="pill gold">+ {ROLES[r]}</span>)}<span className="pill">{locName(p.location_id)}</span></div>}
               </div>
+              {manager && (
+                <div className="row wrap" style={{ gap: 6, marginTop: 8, alignItems: 'center' }}>
+                  <span className="small muted">Also does:</span>
+                  {['coach', 'sales', 'frontdesk', 'director'].filter(r => r !== p.role).map(r => { const on = (p.roles || []).includes(r); return <button key={r} type="button" className={`chip gold ${on ? 'on' : ''}`} onClick={() => update(p.id, { roles: on ? (p.roles || []).filter(x => x !== r) : [...(p.roles || []), r] })}>{ROLES[r]}</button> })}
+                </div>
+              )}
               {manager && (
                 <div className="row wrap small muted" style={{ gap: 14, marginTop: 8 }}>
                   {need > 0 && <span>SOPs read {Math.min(have, need)}/{need}</span>}
-                  {['coach', 'director'].includes(p.role) && modsTotal > 0 && <span>Method {md}/{modsTotal}</span>}
+                  {isCoach([p.role, ...(p.roles || [])]) && modsTotal > 0 && <span>Method {md}/{modsTotal}</span>}
                   <span>{hoursOf(p.id).toFixed(1)} h this {period === 'week' ? 'week' : 'period'}</span>
-                  {['coach', 'director'].includes(p.role) && <span>{sessionsOf(p.id).length} sessions</span>}
+                  {isCoach([p.role, ...(p.roles || [])]) && <span>{sessionsOf(p.id).length} sessions</span>}
                 </div>
               )}
             </div>

@@ -3,21 +3,23 @@ import { useAuth } from '../lib/auth.jsx'
 import { supabase, today } from '../lib/supabase'
 
 // Daily goals, pinned to the top of Today. Each goal flips to a green check the moment it's hit.
-export default function Goals({ userId, role: roleProp, readOnly = false, date = today(), compact = false }) {
+export default function Goals({ userId, roles: rolesProp, readOnly = false, date = today(), compact = false }) {
   const auth = useAuth()
   const uid = userId || auth.user.id
-  const role = roleProp || auth.role
+  const roles = rolesProp || auth.roles
   const [goals, setGoals] = useState([])
   const [data, setData] = useState({})
   const [saving, setSaving] = useState(false)
 
   async function load() {
-    const { data: g } = await supabase.from('kpi_goals').select('*').eq('role', role).eq('active', true).order('sort')
-    setGoals(g || [])
+    const { data: g } = await supabase.from('kpi_goals').select('*').in('role', roles).eq('active', true).order('role').order('sort')
+    // same metric in two roles (e.g. 'sessions') counts once, with the higher goal
+    const seen = {}; for (const x of g || []) { if (!seen[x.metric] || Number(x.goal) > Number(seen[x.metric].goal)) seen[x.metric] = x }
+    setGoals(Object.values(seen).sort((a, b) => a.role.localeCompare(b.role) || a.sort - b.sort))
     const { data: d } = await supabase.from('kpi_days').select('data').eq('user_id', uid).eq('kpi_date', date).maybeSingle()
     setData(d?.data || {})
   }
-  useEffect(() => { load() }, [uid, role, date])
+  useEffect(() => { load() }, [uid, roles.join(','), date])
 
   async function set(metric, value) {
     const next = { ...data, [metric]: Math.max(0, value) }
@@ -47,7 +49,7 @@ export default function Goals({ userId, role: roleProp, readOnly = false, date =
               <span className={`check ${done ? 'on' : ''}`} style={done ? { background: 'var(--good)', borderColor: 'var(--good)', color: '#0A0A0A' } : {}}>{done ? '✓' : ''}</span>
               <span className="grow">
                 <div className="row between">
-                  <span style={{ fontWeight: 600 }}>{g.label}</span>
+                  <span style={{ fontWeight: 600 }}>{g.label}{roles.length > 1 && <span className="muted small"> · {g.role}</span>}</span>
                   <span className="display" style={{ fontSize: '1.4rem', color: done ? 'var(--good)' : 'var(--pink)' }}>
                     {g.kind === 'check' ? (done ? 'DONE' : 'NOT YET') : <>{v}<span className="muted" style={{ fontSize: '0.9rem' }}> / {goal}{stretch ? `–${stretch}` : ''}</span></>}
                   </span>

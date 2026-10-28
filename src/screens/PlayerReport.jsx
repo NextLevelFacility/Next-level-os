@@ -12,7 +12,7 @@ const ARC = [['m3', '3 MO'], ['m6', '6 MO'], ['y1', '1 YR']]
 
 export default function PlayerReport() {
   const { id, reportId } = useParams()
-  const { user, role } = useAuth()
+  const { user, roles: role } = useAuth()
   const [a, setA] = useState(null)
   const [r, setR] = useState(null)
   const [log, setLog] = useState([])

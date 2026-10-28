@@ -14,7 +14,7 @@ export const avg = (rows, k) => { const v = rows.map(r => r[k]).filter(x => x !=
 export default function AthleteDetail() {
   const { id } = useParams()
   const nav = useNavigate()
-  const { role, user, locationId } = useAuth()
+  const { roles: role, user, locationId } = useAuth()
   const [a, setA] = useState(null)
   const [log, setLog] = useState([])
   const [reports, setReports] = useState([])

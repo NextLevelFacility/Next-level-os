@@ -4,7 +4,7 @@ import { useAuth } from '../lib/auth.jsx'
 import { supabase, isDirector } from '../lib/supabase'
 
 export default function Method() {
-  const { user, role } = useAuth()
+  const { user, roles: role } = useAuth()
   const nav = useNavigate()
   const [mods, setMods] = useState([])
   const [done, setDone] = useState(new Set())

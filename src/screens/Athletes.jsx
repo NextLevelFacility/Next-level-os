@@ -6,7 +6,7 @@ import { supabase, isCoach, PROGRAMS } from '../lib/supabase'
 export const initials = (n = '') => n.split(' ').filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase()
 
 export default function Athletes() {
-  const { user, role, locationId, locations } = useAuth()
+  const { user, roles: role, locationId, locations } = useAuth()
   const [list, setList] = useState([])
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)

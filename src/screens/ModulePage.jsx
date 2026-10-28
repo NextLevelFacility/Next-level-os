@@ -16,7 +16,7 @@ export default function ModulePage() {
   const { id } = useParams()
   const [params] = useSearchParams()
   const nav = useNavigate()
-  const { user, role } = useAuth()
+  const { user, roles: role } = useAuth()
   const [m, setM] = useState(null)
   const [edit, setEdit] = useState(params.get('edit') === '1')
   const [done, setDone] = useState(false)
