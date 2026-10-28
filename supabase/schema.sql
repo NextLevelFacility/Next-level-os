@@ -243,12 +243,29 @@ drop policy if exists "reports read" on reports;
 create policy "reports read" on reports for select to authenticated
   using (user_id = auth.uid() or my_role() = 'owner' or (is_manager() and location_id = my_location()));
 
+-- Only an owner/operator may change someone's role or location (a hire can't promote themselves)
+create or replace function protect_profile_fields() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if (new.role is distinct from old.role or new.location_id is distinct from old.location_id)
+     and not is_manager() then
+    raise exception 'Only an Owner or Operator can change role or location';
+  end if;
+  return new;
+end $$;
+drop trigger if exists protect_profile_fields on profiles;
+create trigger protect_profile_fields before update on profiles
+  for each row execute function protect_profile_fields();
+
 -- ---------- Photo storage for checklists ----------
 insert into storage.buckets (id, name, public) values ('checklist-photos', 'checklist-photos', true)
 on conflict (id) do nothing;
-drop policy if exists "upload checklist photos" on storage.objects;
-create policy "upload checklist photos" on storage.objects for insert to authenticated
-  with check (bucket_id = 'checklist-photos');
-drop policy if exists "read checklist photos" on storage.objects;
-create policy "read checklist photos" on storage.objects for select to public
-  using (bucket_id = 'checklist-photos');
+do $$
+begin
+  execute 'drop policy if exists "upload checklist photos" on storage.objects';
+  execute 'create policy "upload checklist photos" on storage.objects for insert to authenticated with check (bucket_id = ''checklist-photos'')';
+  execute 'drop policy if exists "read checklist photos" on storage.objects';
+  execute 'create policy "read checklist photos" on storage.objects for select to public using (bucket_id = ''checklist-photos'')';
+exception when others then
+  raise notice 'Storage policies skipped (%). Set them in Storage → checklist-photos → Policies.', sqlerrm;
+end $$;
