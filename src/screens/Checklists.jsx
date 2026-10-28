@@ -7,12 +7,15 @@ const today = () => new Date().toISOString().slice(0, 10)
 export default function Checklists() {
   const { user, role, locationId } = useAuth()
   const [templates, setTemplates] = useState([])
+  const [allTemplates, setAllTemplates] = useState([])
   const [runs, setRuns] = useState({})
   const [open, setOpen] = useState(null)
+  const [editing, setEditing] = useState(null)   // manager: template being edited
 
   async function load() {
-    const { data: t } = await supabase.from('checklist_templates').select('*').eq('active', true).order('slot')
-    setTemplates((t || []).filter(x => !x.role || x.role === role || isManager(role)))
+    const { data: t } = await supabase.from('checklist_templates').select('*').order('slot')
+    setTemplates((t || []).filter(x => x.active && (!x.role || x.role === role || isManager(role))))
+    setAllTemplates(t || [])
     const { data: r } = await supabase.from('checklist_runs').select('*').eq('run_date', today()).eq('location_id', locationId)
     setRuns(Object.fromEntries((r || []).map(x => [x.template_id, x])))
   }
@@ -36,9 +39,33 @@ export default function Checklists() {
     if (data) setRuns({ ...runs, [t.id]: data })
   }
 
+  async function saveTemplate(e) {
+    e.preventDefault()
+    const items = editing.itemsText.split('\n').map(l => l.trim()).filter(Boolean).map(l => l.startsWith('!') ? { text: l.slice(1).trim(), photo: true } : { text: l })
+    const { itemsText, id, created_at, ...rest } = editing
+    const payload = { ...rest, items, role: rest.role || null }
+    const { error } = id ? await supabase.from('checklist_templates').update(payload).eq('id', id) : await supabase.from('checklist_templates').insert(payload)
+    if (error) return alert(error.message); setEditing(null); load()
+  }
+  const startEdit = t => setEditing({ ...t, itemsText: (t.items || []).map(i => (i.photo ? '!' : '') + i.text).join('\n') })
+
   return (
     <>
-      <h1>Checklists</h1>
+      <div className="row between"><h1>Checklists</h1>{isManager(role) && <button className="btn small" onClick={() => setEditing({ name: '', slot: 'daily', role: '', active: true, itemsText: '' })}>+ New checklist</button>}</div>
+      {editing && (
+        <form className="card accent" onSubmit={saveTemplate}>
+          <h2>{editing.id ? 'Edit checklist' : 'New checklist'}</h2>
+          <label className="field"><span>Name</span><input className="input" value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} required /></label>
+          <div className="row" style={{ gap: 8 }}>
+            <label className="field" style={{ flex: 1 }}><span>When</span><select className="input" value={editing.slot} onChange={e => setEditing({ ...editing, slot: e.target.value })}>{['opening', 'shift', 'daily', 'closing', 'event', 'weekly'].map(x => <option key={x}>{x}</option>)}</select></label>
+            <label className="field" style={{ flex: 1 }}><span>Who</span><select className="input" value={editing.role || ''} onChange={e => setEditing({ ...editing, role: e.target.value })}><option value="">Everyone</option>{['frontdesk', 'coach', 'sales', 'director', 'operator'].map(x => <option key={x} value={x}>{x}</option>)}</select></label>
+            <label className="field" style={{ flex: 1 }}><span>Active</span><select className="input" value={editing.active ? 'yes' : 'no'} onChange={e => setEditing({ ...editing, active: e.target.value === 'yes' })}><option value="yes">Yes</option><option value="no">No</option></select></label>
+          </div>
+          <label className="field"><span>Items, one per line. Start a line with ! to require a photo.</span><textarea className="input" style={{ minHeight: 200 }} value={editing.itemsText} onChange={e => setEditing({ ...editing, itemsText: e.target.value })} /></label>
+          <div className="row" style={{ gap: 8 }}><button className="btn">Save</button><button type="button" className="btn ghost" onClick={() => setEditing(null)}>Cancel</button></div>
+        </form>
+      )}
+      {isManager(role) && allTemplates.some(t => !t.active) && <p className="small muted">Inactive: {allTemplates.filter(t => !t.active).map(t => <a key={t.id} href="#" onClick={e => { e.preventDefault(); startEdit(t) }} style={{ marginRight: 8 }}>{t.name}</a>)}</p>}
       <p className="muted">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} · tap to tick, each tick is timestamped.</p>
       {templates.length === 0 && <div className="empty">No checklists yet. The Owner adds them in Supabase → checklist_templates.</div>}
       {templates.map(t => {
@@ -52,7 +79,7 @@ export default function Checklists() {
                 <div className="row" style={{ gap: 8 }}><span className="pill pink">{t.slot}</span><h2 style={{ margin: 0 }}>{t.name}</h2></div>
                 <div className="small muted">{doneCount} of {t.items.length} · {run?.done ? <span style={{ color: 'var(--good)' }}>complete</span> : 'open'}</div>
               </div>
-              <span className={`check ${run?.done ? 'on' : ''}`}>{run?.done ? '✓' : ''}</span>
+              <div className="row" style={{ gap: 6 }}>{isManager(role) && <button className="btn ghost small" onClick={e => { e.stopPropagation(); startEdit(t) }}>Edit</button>}<span className={`check ${run?.done ? 'on' : ''}`}>{run?.done ? '✓' : ''}</span></div>
             </div>
             {isOpen && (
               <ul className="list" style={{ marginTop: 10 }}>

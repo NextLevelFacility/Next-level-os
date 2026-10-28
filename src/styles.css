@@ -151,3 +151,106 @@ label.field span { display: block; font-size: 0.8rem; text-transform: uppercase;
 .callout { border-radius: 10px; border-left: 4px solid var(--pink); background: rgba(255,20,147,0.08); padding: 10px 14px; margin: 14px 0; }
 .callout.gold { border-left-color: var(--gold); background: rgba(212,175,55,0.08); }
 .callout .ct { font-family: var(--display); letter-spacing: 0.06em; text-transform: uppercase; font-size: 1.1rem; margin-bottom: 4px; color: #fff; }
+
+/* ---------- More sheet (mobile) / full sidebar (desktop) ---------- */
+.sheet-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 9; }
+.sheet { position: absolute; left: 8px; right: 8px; bottom: calc(68px + env(safe-area-inset-bottom)); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.sheet a { display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--muted); font-size: 0.72rem; padding: 10px 4px; border-radius: 10px; }
+.sheet a.active { color: var(--pink); background: var(--pink-soft); }
+.sheet a svg { width: 22px; height: 22px; }
+.side-extra { display: none; }
+@media (min-width: 900px) {
+  .tabbar > a:last-of-type { display: none; }       /* the More button */
+  .side-extra { display: contents; }
+  .sheet-backdrop { display: none; }
+}
+
+/* ---------- Clock ---------- */
+.clock { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.clock .big { font-family: var(--display); font-size: 2.2rem; line-height: 1; }
+.clock .big.live { color: var(--good); }
+.btn.good { background: var(--good); color: #0A0A0A; }
+.btn.danger { background: transparent; border: 1px solid var(--pink); color: var(--pink); }
+
+/* ---------- Chips (multi-select) ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px dashed var(--line); color: var(--muted); border-radius: 999px; padding: 6px 12px; font-size: 0.78rem; letter-spacing: 0.04em; cursor: pointer; background: transparent; }
+.chip.on { border-style: solid; border-color: var(--pink); color: #fff; background: var(--pink-soft); }
+.chip.gold.on { border-color: var(--gold); background: var(--gold-soft); }
+
+/* ---------- Score picker 1–10 ---------- */
+.scorepick { display: flex; gap: 4px; flex-wrap: wrap; }
+.scorepick button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-weight: 600; cursor: pointer; padding: 0; }
+.scorepick button.on { background: var(--pink); border-color: var(--pink); color: #fff; }
+.scores3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.scorebox { background: var(--black); border: 1px solid var(--line); border-top: 2px solid var(--gold); border-radius: 10px; padding: 10px; text-align: center; }
+.scorebox .l { font-family: var(--display); letter-spacing: 0.1em; font-size: 0.8rem; color: var(--muted); }
+.scorebox .v { font-family: var(--display); font-size: 2.4rem; color: var(--pink); line-height: 1; }
+.scorebox .v small { font-size: 1rem; color: var(--faint); }
+
+/* ---------- Athlete card ---------- */
+.athlete-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); color: inherit; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--pink), var(--gold)); color: #0A0A0A; font-family: var(--display); font-size: 1.1rem; display: grid; place-items: center; flex-shrink: 0; }
+.snap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.snap .card { border-left: 3px solid var(--pink); margin: 0; padding: 12px; }
+.snap .l { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+.snap .v { font-family: var(--display); font-size: 1.8rem; line-height: 1.05; }
+.snap .s { font-size: 0.78rem; color: var(--muted); }
+.trend { font-size: 0.8rem; }
+
+/* ---------- Markdown editor ---------- */
+.editor textarea { min-height: 320px; font-family: ui-monospace, Menlo, monospace; font-size: 0.9rem; }
+.video { aspect-ratio: 16/9; width: 100%; border: 0; border-radius: 12px; background: #000; }
+
+/* ---------- Chat (Ask) ---------- */
+.chat { display: flex; flex-direction: column; gap: 10px; }
+.msg { max-width: 92%; padding: 10px 14px; border-radius: 14px; line-height: 1.5; white-space: pre-wrap; }
+.msg.me { align-self: flex-end; background: var(--pink); color: #fff; border-bottom-right-radius: 4px; }
+.msg.ai { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.msg.ai .md h2 { font-size: 1.1rem; margin: 0.6em 0 0.2em; }
+.askbar { position: sticky; bottom: calc(72px + env(safe-area-inset-bottom)); display: flex; gap: 8px; background: var(--black); padding: 8px 0; }
+@media (min-width: 900px) { .askbar { bottom: 0; } }
+
+/* ---------- Printable Player Development Report ---------- */
+.pdr { background: #fff; color: #111; border-radius: 12px; overflow: hidden; font-family: var(--body); }
+.pdr .head { background: #0A0A0A; color: #fff; padding: 22px 26px 18px; border-bottom: 4px solid var(--pink); }
+.pdr .head .top { font-family: var(--display); letter-spacing: 0.2em; font-size: 0.85rem; color: #bbb; }
+.pdr .head .top b { color: var(--gold); font-weight: 400; }
+.pdr .head .name { font-family: var(--display); font-size: 2.6rem; line-height: 1; margin: 6px 0 4px; }
+.pdr .head .meta { font-family: var(--display); letter-spacing: 0.08em; font-size: 0.9rem; color: #ddd; }
+.pdr .head .meta .sep { color: var(--pink); margin: 0 8px; }
+.pdr .head .tag { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; color: var(--gold); margin-top: 6px; }
+.pdr section { padding: 18px 26px; border-bottom: 1px solid #e6e6e6; }
+.pdr h2 { font-family: var(--display); letter-spacing: 0.15em; font-size: 1.05rem; color: #111; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+.pdr h2::after { content: ""; flex: 1; height: 1px; background: #e6e6e6; }
+.pdr .snap .card { background: #fafafa; border: 1px solid #eee; border-left: 3px solid var(--pink); color: #111; }
+.pdr .snap .v { color: #111; }
+.pdr .snap .l, .pdr .snap .s { color: #666; }
+.pdr .coaches { font-family: var(--display); letter-spacing: 0.1em; color: #444; font-size: 0.85rem; margin-bottom: 10px; }
+.pdr .scorebox { background: #0A0A0A; border-color: #0A0A0A; }
+.pdr .scorebox .l { color: #aaa; }
+.pdr .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.pdr .pills span { border: 1px dashed #bbb; color: #888; border-radius: 999px; padding: 4px 10px; font-size: 0.72rem; letter-spacing: 0.06em; }
+.pdr .pills span.on { border: 1px solid var(--pink); background: var(--pink); color: #fff; }
+.pdr .dual { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pdr .box { border: 1px solid #e6e6e6; border-top: 3px solid var(--good); padding: 10px 12px; min-height: 80px; font-size: 0.9rem; white-space: pre-wrap; }
+.pdr .box.dev { border-top-color: var(--pink); }
+.pdr .box .bl { font-family: var(--display); letter-spacing: 0.12em; font-size: 0.8rem; color: #555; margin-bottom: 4px; }
+.pdr .reading { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 1.05rem; line-height: 1.6; white-space: pre-wrap; }
+.pdr .sig { font-family: var(--display); letter-spacing: 0.12em; font-size: 0.8rem; color: #777; margin-top: 8px; }
+.pdr .arc { display: grid; grid-template-columns: 56px 110px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; align-items: baseline; font-size: 0.9rem; }
+.pdr .arc .st { font-family: var(--display); color: var(--pink); font-size: 1.1rem; }
+.pdr .arc .dt { font-family: var(--display); letter-spacing: 0.06em; color: #555; }
+.pdr table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.pdr th { font-family: var(--display); letter-spacing: 0.1em; font-weight: 400; text-align: left; color: #555; border-bottom: 2px solid #0A0A0A; padding: 6px 4px; }
+.pdr td { padding: 6px 4px; border-bottom: 1px solid #eee; }
+.pdr .step { margin: 6px 0; font-size: 0.92rem; }
+.pdr .step b { color: var(--pink); font-family: var(--display); letter-spacing: 0.08em; font-weight: 400; }
+.pdr .foot { background: #0A0A0A; color: #ccc; font-family: var(--display); letter-spacing: 0.12em; font-size: 0.75rem; text-align: center; padding: 12px; }
+@media print {
+  body { background: #fff; }
+  .topbar, .tabbar, .no-print, .sheet-backdrop { display: none !important; }
+  .main { margin: 0; padding: 0; max-width: none; }
+  .pdr { border-radius: 0; }
+  .pdr .head, .pdr .scorebox, .pdr .foot, .pdr .pills span.on { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

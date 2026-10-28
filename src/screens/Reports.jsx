@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../lib/auth.jsx'
-import { supabase, isManager } from '../lib/supabase'
+import { supabase, isManager, today } from '../lib/supabase'
 
 export const REPORT_TYPES = {
   shift: { label: 'Shift report', roles: ['frontdesk', 'operator', 'owner'], fields: [
@@ -10,8 +10,8 @@ export const REPORT_TYPES = {
     ['sessions', 'Sessions coached', 'number'], ['athletes', 'Athletes trained', 'number'], ['evals', 'Evaluations run', 'number'],
     ['standouts', 'Athletes who stood out (and why)', 'text'], ['concerns', 'Athletes to watch (effort, attitude, injury)', 'text'] ] },
   sales: { label: 'Daily sales report', roles: ['sales', 'operator', 'owner'], fields: [
-    ['leads', 'New leads', 'number'], ['contacted', 'Leads contacted', 'number'], ['evals_booked', 'Evals booked', 'number'], ['evals_showed', 'Evals showed', 'number'],
-    ['closed', 'Members closed', 'number'], ['revenue', 'New revenue signed ($)', 'number'], ['objections', 'Objections heard today', 'text'] ] },
+    ['calls', 'Calls made (goal 100)', 'number'], ['meetings_booked', 'Meetings booked (goal 3–5)', 'number'], ['evals_showed', 'Evals showed', 'number'],
+    ['closed', 'Closes (goal 2)', 'number'], ['revenue', 'New revenue signed ($)', 'number'], ['objections', 'Objections heard today', 'text'], ['tomorrow', 'Top 3 follow-ups for tomorrow', 'text'] ] },
   incident: { label: 'Incident report', roles: ['*'], fields: [
     ['what', 'What happened', 'text'], ['who', 'Who was involved', 'text'], ['action', 'What was done', 'text'], ['followup', 'Needs follow-up from the Operator?', 'text'] ] },
 }
@@ -34,7 +34,24 @@ export default function Reports() {
     e.preventDefault()
     const { error } = await supabase.from('reports').insert({ location_id: locationId, user_id: user.id, kind, data })
     if (error) return setMsg(error.message)
+    // A sales report also updates the day's goals, so the checkmarks match the report.
+    if (kind === 'sales') {
+      const { data: k } = await supabase.from('kpi_days').select('data').eq('user_id', user.id).eq('kpi_date', today()).maybeSingle()
+      const d = { ...(k?.data || {}) }
+      if (data.calls !== '' && data.calls != null) d.calls = Number(data.calls)
+      if (data.meetings_booked !== '' && data.meetings_booked != null) d.meetings = Number(data.meetings_booked)
+      if (data.closed !== '' && data.closed != null) d.closes = Number(data.closed)
+      await supabase.from('kpi_days').upsert({ user_id: user.id, location_id: locationId, kpi_date: today(), data: d }, { onConflict: 'user_id,kpi_date' })
+    }
     setMsg('Filed. It\'s on the dashboard now.'); setKind(null); setData({}); load()
+  }
+  async function openKind(k) {
+    setKind(k); setMsg('')
+    if (k === 'sales') {
+      const { data: kd } = await supabase.from('kpi_days').select('data').eq('user_id', user.id).eq('kpi_date', today()).maybeSingle()
+      const g = kd?.data || {}
+      setData({ calls: g.calls ?? '', meetings_booked: g.meetings ?? '', closed: g.closes ?? '' })
+    } else setData({})
   }
 
   return (
@@ -44,7 +61,7 @@ export default function Reports() {
       {msg && <div className="card accent">{msg}</div>}
       {!kind ? (
         <div className="grid">
-          {available.map(([k, t]) => <button key={k} className="stat" style={{ textAlign: 'left', cursor: 'pointer', color: 'inherit' }} onClick={() => { setKind(k); setMsg('') }}><div className="label">File</div><div className="display" style={{ fontSize: '1.4rem' }}>{t.label}</div></button>)}
+          {available.map(([k, t]) => <button key={k} className="stat" style={{ textAlign: 'left', cursor: 'pointer', color: 'inherit' }} onClick={() => openKind(k)}><div className="label">File</div><div className="display" style={{ fontSize: '1.4rem' }}>{t.label}</div></button>)}
         </div>
       ) : (
         <form className="card" onSubmit={submit}>

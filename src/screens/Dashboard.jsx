@@ -1,35 +1,52 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
-import { supabase } from '../lib/supabase'
+import { supabase, today, ROLES, hours, fmtDate } from '../lib/supabase'
+import { callFn, money } from '../lib/api'
 import { REPORT_TYPES } from './Reports.jsx'
+import ClinicBoard from '../components/ClinicBoard.jsx'
 
-const today = () => new Date().toISOString().slice(0, 10)
 const daysAgo = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
+const weekStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString() }
 
 export default function Dashboard() {
   const { role, locationId, locations } = useAuth()
   const [loc, setLoc] = useState(role === 'owner' ? 'all' : locationId)
   const [d, setD] = useState(null)
+  const [sq, setSq] = useState(null)
+  const [pp, setPp] = useState(null)
 
+  useEffect(() => { callFn('square-summary').then(setSq); callFn('pushpress-summary').then(setPp) }, [])
   useEffect(() => {
     (async () => {
       const scope = q => loc === 'all' ? q : q.eq('location_id', loc)
-      const { data: reports } = await scope(supabase.from('reports').select('*, profiles(full_name)')).gte('report_date', daysAgo(7)).order('created_at', { ascending: false })
-      const { data: runs } = await scope(supabase.from('checklist_runs').select('*')).eq('run_date', today())
-      const { data: templates } = await supabase.from('checklist_templates').select('id, name, slot').eq('active', true)
-      const { data: hires } = await scope(supabase.from('hires').select('*, onboarding_tasks(done)')).neq('status', 'complete')
-      const { data: people } = await scope(supabase.from('profiles').select('id, full_name, role'))
-      setD({ reports: reports || [], runs: runs || [], templates: templates || [], hires: hires || [], people: people || [] })
+      const [{ data: reports }, { data: runs }, { data: templates }, { data: hires }, { data: people }, { data: goals }, { data: kpis }, { data: time }, { data: sessions }, { data: questions }] = await Promise.all([
+        scope(supabase.from('reports').select('*, profiles(full_name)')).gte('report_date', daysAgo(7)).order('created_at', { ascending: false }),
+        scope(supabase.from('checklist_runs').select('*')).eq('run_date', today()),
+        supabase.from('checklist_templates').select('id, name, slot, role').eq('active', true),
+        scope(supabase.from('hires').select('*, onboarding_tasks(done)')).neq('status', 'complete'),
+        scope(supabase.from('profiles').select('id, full_name, role, location_id')),
+        supabase.from('kpi_goals').select('*').eq('active', true).order('sort'),
+        scope(supabase.from('kpi_days').select('*')).eq('kpi_date', today()),
+        scope(supabase.from('time_entries').select('*, profiles(full_name)')).gte('clock_in', weekStart()),
+        scope(supabase.from('sessions').select('id, coach_id, session_date, session_athletes(count)')).gte('session_date', daysAgo(7)),
+        supabase.from('ai_questions').select('question, created_at, profiles(full_name)').order('created_at', { ascending: false }).limit(8),
+      ])
+      setD({ reports: reports || [], runs: runs || [], templates: templates || [], hires: hires || [], people: people || [], goals: goals || [], kpis: kpis || [], time: time || [], sessions: sessions || [], questions: questions || [] })
     })()
   }, [loc])
 
   if (!d) return <p className="muted">Loading…</p>
-  const todayReports = d.reports.filter(r => r.report_date === today())
   const sum = (kind, key, days = 0) => d.reports.filter(r => r.kind === kind && (!days || r.report_date >= daysAgo(days))).reduce((a, r) => a + (Number(r.data?.[key]) || 0), 0)
   const checklistsDone = d.runs.filter(r => r.done).length
   const incidents = d.reports.filter(r => r.kind === 'incident')
-  const closed7 = sum('sales', 'closed', 7), leads7 = sum('sales', 'leads', 7), rev7 = sum('sales', 'revenue', 7)
-  const evalsB = sum('sales', 'evals_booked', 7), evalsS = sum('sales', 'evals_showed', 7)
+  const onClock = d.time.filter(t => !t.clock_out)
+  const kpiOf = uid => d.kpis.find(k => k.user_id === uid)?.data || {}
+  const goalRows = d.people.filter(p => ['sales', 'frontdesk', 'coach', 'director'].includes(p.role)).map(p => {
+    const gs = d.goals.filter(g => g.role === p.role); const data = kpiOf(p.id)
+    return { p, gs, data, hit: gs.filter(g => (Number(data[g.metric]) || 0) >= Number(g.goal)).length }
+  })
+  const sessions7 = d.sessions.length, athletes7 = d.sessions.reduce((a, s) => a + (s.session_athletes?.[0]?.count || 0), 0)
 
   return (
     <>
@@ -41,45 +58,83 @@ export default function Dashboard() {
           </select>
         )}
       </div>
-      <p className="muted">Last 7 days from staff reports and checklists. Square, PushPress, GoHighLevel, Sheets and Calendar feeds arrive in Phase 2.</p>
+      <p className="muted small">Open this once a day. Everything below updates on its own.</p>
 
-      <h2>Sales · 7 days</h2>
-      <div className="grid">
-        <Stat label="New revenue signed" value={'$' + rev7.toLocaleString()} tone="pink" />
-        <Stat label="Members closed" value={closed7} tone="gold" />
-        <Stat label="Leads" value={leads7} />
-        <Stat label="Evals booked → showed" value={`${evalsB} → ${evalsS}`} />
-        <Stat label="Close rate" value={evalsS ? Math.round(closed7 / evalsS * 100) + '%' : '—'} tone="gold" />
+      <h2>Sales · Square</h2>
+      {!sq ? <p className="muted">Loading Square…</p> : !sq.connected ? (
+        <div className="card"><p className="muted">Square isn't connected yet. Add <code>SQUARE_ACCESS_TOKEN</code> in Netlify → Environment variables and this fills in live: sales today, this week, this month, membership sales, and clinic sign-ups.</p></div>
+      ) : sq.error ? <div className="card"><p className="flag">Square: {sq.error}</p></div> : (
+        <>
+          <div className="grid">
+            <Stat label="Today" value={money(sq.today.sales)} tone="pink" sub={`${sq.today.count} payments`} />
+            <Stat label="Last 7 days" value={money(sq.week.sales)} sub={`${sq.week.count} payments`} />
+            <Stat label="Month to date" value={money(sq.month.sales)} tone="gold" sub={`${sq.month.count} payments`} />
+            <Stat label="Memberships · MTD" value={money(sq.month.memberships)} sub="items with member/program in the name" />
+            <Stat label="Active subscriptions" value={sq.subscriptions?.active ?? '—'} sub="Square subscriptions" />
+          </div>
+          {sq.items?.length > 0 && <div className="card"><h3>What sold this month</h3><ul className="list">{sq.items.map(([n, v]) => <li key={n}><span className="grow">{n}</span><b>{money(v)}</b></li>)}</ul></div>}
+        </>
+      )}
+
+      <h2>Members</h2>
+      {!pp ? <p className="muted">Loading PushPress…</p> : !pp.connected ? (
+        <div className="card"><p className="muted">PushPress isn't connected yet. Add <code>PUSHPRESS_API_KEY</code> in Netlify → Environment variables to see active members and plans here.</p></div>
+      ) : pp.error ? <div className="card"><p className="flag">PushPress: {pp.error}</p></div> : (
+        <div className="grid">
+          <Stat label="Active members" value={pp.active ?? '—'} tone="gold" />
+          {pp.plans?.slice(0, 5).map(([n, c]) => <Stat key={n} label={n} value={c} />)}
+        </div>
+      )}
+
+      <ClinicBoard />
+
+      <h2>Goals today · by person</h2>
+      <div className="card">
+        {goalRows.length === 0 ? <p className="muted">No one with daily goals yet. Set roles on the Team page.</p> : (
+          <ul className="list">
+            {goalRows.map(({ p, gs, data, hit }) => (
+              <li key={p.id} style={{ alignItems: 'flex-start' }}>
+                <span className={`pill ${hit === gs.length && gs.length ? 'good' : hit > 0 ? 'gold' : ''}`}>{hit}/{gs.length}</span>
+                <span className="grow"><div style={{ fontWeight: 600 }}>{p.full_name} <span className="muted small">· {ROLES[p.role]}</span></div>
+                  <div className="row wrap small" style={{ gap: 8, marginTop: 2 }}>{gs.map(g => { const v = Number(data[g.metric]) || 0, ok = v >= Number(g.goal); return <span key={g.id} style={{ color: ok ? 'var(--good)' : 'var(--muted)' }}>{ok ? '✓' : '○'} {g.label}: {g.kind === 'check' ? (ok ? 'done' : 'not yet') : `${v}/${g.goal}`}</span> })}</div>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Link to="/team" className="small">Edit goals on the Team page →</Link>
       </div>
 
-      <h2>Today</h2>
+      <h2>Today on the floor</h2>
       <div className="grid">
+        <Stat label="On the clock now" value={onClock.length} tone="gold" sub={onClock.map(t => t.profiles?.full_name?.split(' ')[0]).filter(Boolean).join(', ') || 'nobody'} />
         <Stat label="Checklists complete" value={`${checklistsDone} / ${d.templates.length}`} tone={checklistsDone < d.templates.length ? 'pink' : 'gold'} />
-        <Stat label="Reports filed" value={todayReports.length} />
-        <Stat label="Sessions coached" value={sum('session', 'sessions').toString()} />
-        <Stat label="Walk-ins" value={sum('shift', 'walkins').toString()} />
-        <Stat label="Concession ($)" value={'$' + sum('shift', 'concession_sales').toLocaleString()} />
+        <Stat label="Reports filed" value={d.reports.filter(r => r.report_date === today()).length} />
+        <Stat label="Sessions · 7 days" value={sessions7} sub={`${athletes7} athlete-sessions`} />
+        <Stat label="Hours · this week" value={hours(d.time.reduce((a, t) => a + ((t.clock_out ? new Date(t.clock_out) : new Date()) - new Date(t.clock_in)), 0))} />
         <Stat label="In onboarding" value={d.hires.length} />
+      </div>
+
+      <h2>Sales reports · 7 days</h2>
+      <div className="grid">
+        <Stat label="Calls" value={sum('sales', 'calls', 7)} />
+        <Stat label="Meetings booked" value={sum('sales', 'meetings_booked', 7)} />
+        <Stat label="Evals showed" value={sum('sales', 'evals_showed', 7)} />
+        <Stat label="Closes" value={sum('sales', 'closed', 7)} tone="gold" />
+        <Stat label="New revenue signed" value={money(sum('sales', 'revenue', 7))} tone="pink" />
       </div>
 
       {incidents.length > 0 && (
         <div className="card" style={{ borderColor: 'var(--pink)' }}>
-          <h2 style={{ color: 'var(--pink)' }}>Incidents · 7 days</h2>
+          <h2 style={{ color: 'var(--pink)', marginTop: 0 }}>Incidents · 7 days</h2>
           <ul className="list">{incidents.map(r => <li key={r.id}><span className="grow"><div>{r.data.what}</div><div className="small muted">{r.profiles?.full_name} · {r.report_date}{r.data.followup && <span className="flag"> · follow-up: {r.data.followup}</span>}</div></span></li>)}</ul>
         </div>
       )}
 
       <div className="card">
-        <h2>Onboarding</h2>
-        {d.hires.length === 0 ? <p className="muted">Nobody in onboarding.</p> : (
-          <ul className="list">{d.hires.map(h => { const t = h.onboarding_tasks.length, n = h.onboarding_tasks.filter(x => x.done).length; return <li key={h.id}><span className="grow"><div>{h.full_name} <span className="small muted">· {h.role} · {h.status}</span></div><div className="progress" style={{ marginTop: 4 }}><div style={{ width: (t ? n / t * 100 : 0) + '%' }} /></div></span><span className="pill gold">{t ? Math.round(n / t * 100) : 0}%</span></li> })}</ul>
-        )}
-      </div>
-
-      <div className="card">
-        <h2>Latest reports</h2>
+        <h2 style={{ marginTop: 0 }}>Latest staff reports</h2>
         <ul className="list">
-          {d.reports.slice(0, 12).map(r => (
+          {d.reports.slice(0, 10).map(r => (
             <li key={r.id}><span className="grow">
               <div><span className="pill gold">{REPORT_TYPES[r.kind]?.label || r.kind}</span> <span className="small muted">{r.profiles?.full_name} · {new Date(r.created_at).toLocaleString()}</span></div>
               <div className="small" style={{ marginTop: 4 }}>{Object.entries(r.data).filter(([, v]) => v !== '' && v != null).map(([k, v]) => <span key={k} style={{ marginRight: 10 }}><span className="muted">{k.replace(/_/g, ' ')}:</span> {String(v)}</span>)}</div>
@@ -88,10 +143,18 @@ export default function Dashboard() {
           {d.reports.length === 0 && <li className="muted">No reports in the last 7 days.</li>}
         </ul>
       </div>
+
+      {d.questions.length > 0 && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>What the team asked the assistant</h2>
+          <p className="small muted">Repeated questions = an SOP that's missing or unclear.</p>
+          <ul className="list">{d.questions.map((q, i) => <li key={i}><span className="grow"><div>{q.question}</div><div className="small muted">{q.profiles?.full_name} · {new Date(q.created_at).toLocaleDateString()}</div></span></li>)}</ul>
+        </div>
+      )}
     </>
   )
 }
 
-function Stat({ label, value, tone }) {
-  return <div className="stat"><div className="label">{label}</div><div className={`value ${tone || ''}`}>{value}</div></div>
+function Stat({ label, value, tone, sub }) {
+  return <div className="stat"><div className="label">{label}</div><div className={`value ${tone || ''}`}>{value}</div>{sub && <div className="small muted">{sub}</div>}</div>
 }
