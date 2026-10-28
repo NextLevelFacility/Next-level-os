@@ -38,9 +38,9 @@ export default function App() {
     ['/playbook', 'Playbook', icons.playbook],
     ['/checklists', 'Checklists', icons.checklists],
     ['/reports', 'Reports', icons.reports],
-    ...(manager || role === 'newhire' ? [['/onboarding', 'Onboarding', icons.onboarding]] : []),
+    ...(manager ? [['/onboarding', 'Hires', icons.onboarding]] : role === 'newhire' ? [['/onboarding', 'My plan', icons.onboarding]] : []),
     ['/team', 'Team', icons.team],
-    ...(manager ? [['/dashboard', 'Dashboard', icons.dashboard]] : []),
+    ...(manager ? [['/dashboard', role === 'owner' ? 'CEO' : 'KPIs', icons.dashboard]] : []),
   ]
 
   return (
