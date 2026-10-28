@@ -1,0 +1,42 @@
+name: Sync Obsidian vault into the app
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"     # every 15 minutes
+  workflow_dispatch:           # or run it by hand from the Actions tab
+  repository_dispatch:
+    types: [vault-updated]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the app
+        uses: actions/checkout@v4
+
+      - name: Check out the vault
+        uses: actions/checkout@v4
+        with:
+          repository: NextLevelFacility/Next-level-vault
+          path: vault-src
+          token: ${{ secrets.VAULT_TOKEN || github.token }}
+
+      - name: Copy markdown into content/vault
+        run: |
+          rm -rf content/vault
+          mkdir -p content/vault
+          rsync -a --include='*/' --include='*.md' --exclude='.obsidian/' --exclude='.git/' --exclude='*' vault-src/ content/vault/
+          rm -rf vault-src
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name "vault-sync"
+          git config user.email "vault-sync@users.noreply.github.com"
+          git add content/vault
+          if git diff --cached --quiet; then echo "Vault unchanged"; else
+            git commit -m "Sync vault $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
