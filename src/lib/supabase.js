@@ -38,4 +38,4 @@ export const PROGRAMS = [
 export const today = () => new Date().toISOString().slice(0, 10)
 export const fmtDate = (d) => d ? new Date(d + (d.length === 10 ? 'T12:00:00' : '')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''
 export const fmtTime = (t) => t ? new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''
-export const hours = (ms) => (ms / 36e5).toFixed(1)
+export const hours = (ms) => (Math.max(0, ms) / 36e5).toFixed(1)

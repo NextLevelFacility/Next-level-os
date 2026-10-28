@@ -254,3 +254,14 @@ label.field span { display: block; font-size: 0.8rem; text-transform: uppercase;
   .pdr { border-radius: 0; }
   .pdr .head, .pdr .scorebox, .pdr .foot, .pdr .pills span.on { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ---------- Desktop: brand lives in the sidebar, topbar clears it ---------- */
+@media (min-width: 900px) {
+  .topbar { padding-left: 224px; }
+  .topbar .brand { display: none; }
+  .tabbar::before {
+    content: "NEXT LEVEL OS"; display: block; margin: 0 12px 18px; font-family: var(--display); font-size: 1.5rem; letter-spacing: 0.08em;
+    background: linear-gradient(90deg, #fff 0%, var(--pink) 60%, var(--gold) 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tabbar { padding-top: 24px; }
+}

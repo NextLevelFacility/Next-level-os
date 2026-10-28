@@ -30,8 +30,8 @@ export default function Clock() {
   }
 
   const now = Date.now()
-  const runningMs = open ? now - new Date(open.clock_in).getTime() : 0
-  const weekMs = week.reduce((a, e) => a + ((e.clock_out ? new Date(e.clock_out) : new Date()) - new Date(e.clock_in)), 0)
+  const runningMs = open ? Math.max(0, now - new Date(open.clock_in).getTime()) : 0
+  const weekMs = week.reduce((a, e) => a + Math.max(0, (e.clock_out ? new Date(e.clock_out) : new Date()) - new Date(e.clock_in)), 0)
 
   return (
     <div className={`card ${open ? 'accent' : ''}`}>
