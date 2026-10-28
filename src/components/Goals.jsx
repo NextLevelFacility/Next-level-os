@@ -3,7 +3,7 @@ import { useAuth } from '../lib/auth.jsx'
 import { supabase, today } from '../lib/supabase'
 
 // Daily goals, pinned to the top of Today. Each goal flips to a green check the moment it's hit.
-export default function Goals({ userId, roles: rolesProp, readOnly = false, date = today(), compact = false }) {
+export default function Goals({ userId, roles: rolesProp, readOnly = false, date = today(), compact = false, refresh = 0 }) {
   const auth = useAuth()
   const uid = userId || auth.user.id
   const roles = rolesProp || auth.roles
@@ -19,7 +19,7 @@ export default function Goals({ userId, roles: rolesProp, readOnly = false, date
     const { data: d } = await supabase.from('kpi_days').select('data').eq('user_id', uid).eq('kpi_date', date).maybeSingle()
     setData(d?.data || {})
   }
-  useEffect(() => { load() }, [uid, roles.join(','), date])
+  useEffect(() => { load() }, [uid, roles.join(','), date, refresh])
 
   async function set(metric, value) {
     const next = { ...data, [metric]: Math.max(0, value) }

@@ -60,7 +60,7 @@ export default function Sales() {
       <h1>Sales</h1>
       <p className="muted">{profile.full_name?.split(' ')[0]}, this is your board. Log every call, meeting and close here. The goals update as you go.</p>
 
-      <Goals key={goalsKey} roles={['sales']} />
+      <Goals roles={['sales']} refresh={goalsKey} />
 
       <div className="card">
         <h2>Log it</h2>
