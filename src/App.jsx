@@ -21,6 +21,7 @@ import Method from './screens/Method.jsx'
 import ModulePage from './screens/ModulePage.jsx'
 import Ask from './screens/Ask.jsx'
 import Clinics from './screens/Clinics.jsx'
+import Sales from './screens/Sales.jsx'
 
 const Icon = ({ d }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
 export const icons = {
@@ -36,11 +37,12 @@ export const icons = {
   ask: 'M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.4 8.4 0 013.8-.9h.5a8.5 8.5 0 018 8v.5z',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   clinics: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2zM9 15l2 2 4-4',
+  sales: 'M22 7l-8.5 8.5-5-5L2 17M16 7h6v6',
   settings: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
 }
 
 export default function App() {
-  const { session, profile, role, roles, signOut } = useAuth()
+  const { session, profile, role, roles, realRole, viewAs, setViewAs, previewing, signOut } = useAuth()
   const [more, setMore] = useState(false)
   const loc = useLocation()
 
@@ -54,7 +56,8 @@ export default function App() {
   const all = {
     today: ['/', 'Today', icons.today],
     athletes: ['/athletes', 'Athletes', icons.athletes],
-    method: ['/method', 'Method', icons.method],
+    method: ['/method', isCoach(roles) ? 'Method' : 'Training', icons.method],
+    sales: ['/sales', 'Sales', icons.sales],
     playbook: ['/playbook', 'Playbook', icons.playbook],
     checklists: ['/checklists', 'Checklists', icons.checklists],
     reports: ['/reports', 'Reports', icons.reports],
@@ -68,11 +71,11 @@ export default function App() {
   const wants = ['today']
   if (manager) wants.push('ceo', 'athletes')
   if (coach) wants.push('athletes', 'method')
-  if (roles.includes('sales')) wants.push('clinics', 'reports')
-  if (roles.includes('frontdesk')) wants.push('checklists', 'clinics')
+  if (roles.includes('sales')) wants.push('sales', 'playbook', 'clinics')
+  if (roles.includes('frontdesk')) wants.push('checklists', 'playbook', 'clinics')
   if (role === 'newhire') wants.push('hires', 'playbook')
-  wants.push('ask', 'clinics', 'playbook', 'checklists', 'reports', 'method', 'hires', 'team', 'settings')
-  const ordered = [...new Set(wants)].filter(k => k !== 'hires' || manager || role === 'newhire').filter(k => k !== 'ceo' || manager).filter(k => k !== 'method' || coach)
+  wants.push('ask', 'method', 'clinics', 'playbook', 'checklists', 'reports', 'sales', 'hires', 'team', 'settings')
+  const ordered = [...new Set(wants)].filter(k => k !== 'hires' || manager || role === 'newhire').filter(k => k !== 'ceo' || manager).filter(k => k !== 'sales' || roles.includes('sales') || manager)
   const primary = ordered.slice(0, 4), extra = ordered.slice(4)
   const isExtraActive = extra.some(k => loc.pathname.startsWith(all[k][0]) && all[k][0] !== '/')
 
@@ -87,6 +90,22 @@ export default function App() {
           <button className="btn ghost small" onClick={signOut}>Out</button>
         </div>
       </header>
+      {realRole === 'owner' && (
+        <div className={`viewas ${previewing ? 'on' : ''}`}>
+          <span className="small">{previewing ? 'Previewing as' : 'View as'}</span>
+          <select className="input" value={viewAs} onChange={e => setViewAs(e.target.value)}>
+            <option value="">Me (Owner)</option>
+            <option value="sales">Sales</option>
+            <option value="coach">Coach</option>
+            <option value="coach+sales">Coach + Sales</option>
+            <option value="frontdesk">Concession / front desk</option>
+            <option value="director">Director (Simon)</option>
+            <option value="operator">Operator</option>
+            <option value="newhire">New hire</option>
+          </select>
+          {previewing && <button className="btn small" onClick={() => setViewAs('')}>Exit preview</button>}
+        </div>
+      )}
       <main className="main">
         <Routes>
           <Route path="/" element={<Today />} />
@@ -107,6 +126,7 @@ export default function App() {
           <Route path="/method/:id" element={<ModulePage />} />
           <Route path="/ask" element={<Ask />} />
           <Route path="/clinics" element={<Clinics />} />
+          <Route path="/sales" element={<Sales />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

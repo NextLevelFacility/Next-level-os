@@ -20,7 +20,7 @@ export default function Dashboard() {
   useEffect(() => {
     (async () => {
       const scope = q => loc === 'all' ? q : q.eq('location_id', loc)
-      const [{ data: reports }, { data: runs }, { data: templates }, { data: hires }, { data: people }, { data: goals }, { data: kpis }, { data: time }, { data: sessions }, { data: questions }] = await Promise.all([
+      const [{ data: reports }, { data: runs }, { data: templates }, { data: hires }, { data: people }, { data: goals }, { data: kpis }, { data: time }, { data: sessions }, { data: questions }, { data: salesLog }] = await Promise.all([
         scope(supabase.from('reports').select('*, profiles(full_name)')).gte('report_date', daysAgo(7)).order('created_at', { ascending: false }),
         scope(supabase.from('checklist_runs').select('*')).eq('run_date', today()),
         supabase.from('checklist_templates').select('id, name, slot, role').eq('active', true),
@@ -31,8 +31,9 @@ export default function Dashboard() {
         scope(supabase.from('time_entries').select('*, profiles(full_name)')).gte('clock_in', weekStart()),
         scope(supabase.from('sessions').select('id, coach_id, session_date, session_athletes(count)')).gte('session_date', daysAgo(7)),
         supabase.from('ai_questions').select('question, created_at, profiles(full_name)').order('created_at', { ascending: false }).limit(8),
+        scope(supabase.from('sales_log').select('*, profiles(full_name)')).gte('log_date', daysAgo(7)).order('created_at', { ascending: false }),
       ])
-      setD({ reports: reports || [], runs: runs || [], templates: templates || [], hires: hires || [], people: people || [], goals: goals || [], kpis: kpis || [], time: time || [], sessions: sessions || [], questions: questions || [] })
+      setD({ reports: reports || [], runs: runs || [], templates: templates || [], hires: hires || [], people: people || [], goals: goals || [], kpis: kpis || [], time: time || [], sessions: sessions || [], questions: questions || [], salesLog: salesLog || [] })
     })()
   }, [loc])
 
@@ -117,7 +118,19 @@ export default function Dashboard() {
         <Stat label="In onboarding" value={d.hires.length} />
       </div>
 
-      <h2>Sales reports · 7 days</h2>
+      <h2>Sales team · 7 days</h2>
+      <div className="grid">
+        <Stat label="Calls" value={d.salesLog.filter(x => x.kind === 'call').reduce((a, x) => a + (Number(x.amount) || 1), 0)} />
+        <Stat label="Meetings booked" value={d.salesLog.filter(x => x.kind === 'meeting').length} />
+        <Stat label="Evals showed" value={d.salesLog.filter(x => x.kind === 'eval').length} />
+        <Stat label="Closes" value={d.salesLog.filter(x => x.kind === 'close').length} tone="gold" />
+        <Stat label="Signed" value={money(d.salesLog.filter(x => x.kind === 'close').reduce((a, x) => a + (Number(x.amount) || 0), 0))} tone="pink" />
+      </div>
+      {d.salesLog.some(x => x.kind === 'close') && (
+        <div className="card"><h3>Closes</h3><ul className="list">{d.salesLog.filter(x => x.kind === 'close').slice(0, 10).map(x => <li key={x.id}><span className="grow"><div>{x.name} <span className="muted small">· {x.program || ''}</span></div><div className="small muted">{x.profiles?.full_name} · {x.log_date}</div></span><b>{money(x.amount)}</b></li>)}</ul></div>
+      )}
+
+      <h2>End-of-day sales reports · 7 days</h2>
       <div className="grid">
         <Stat label="Calls" value={sum('sales', 'calls', 7)} />
         <Stat label="Meetings booked" value={sum('sales', 'meetings_booked', 7)} />

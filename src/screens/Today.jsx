@@ -67,6 +67,14 @@ export default function Today() {
         </div>
       )}
 
+      {roles.includes('sales') && (
+        <div className="card">
+          <div className="row between"><h2>Sales board</h2><Link to="/sales" className="small">Open</Link></div>
+          <p className="muted small">Log every call, meeting and close. The goals above update as you go.</p>
+          <Link className="btn block" to="/sales">Open the sales board</Link>
+        </div>
+      )}
+
       {isCoach(roles) && (
         <div className="card">
           <div className="row between"><h2>Sessions</h2><Link to="/athletes" className="small">Athletes</Link></div>

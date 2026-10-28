@@ -7,6 +7,8 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined)
   const [profile, setProfile] = useState(null)
   const [locations, setLocations] = useState([])
+  const [viewAs, setViewAsState] = useState(() => { try { return sessionStorage.getItem('nl-view-as') || '' } catch { return '' } })
+  const setViewAs = (v) => { setViewAsState(v || ''); try { v ? sessionStorage.setItem('nl-view-as', v) : sessionStorage.removeItem('nl-view-as') } catch {} }
 
   async function loadProfile(user, attempt = 0) {
     if (!user) { setProfile(null); return }
@@ -30,11 +32,15 @@ export function AuthProvider({ children }) {
     return () => sub.subscription.unsubscribe()
   }, [])
 
+  const realRole = profile?.role || 'newhire'
+  const realRoles = [...new Set([realRole, ...(profile?.roles || [])])]
+  const previewing = realRole === 'owner' && Boolean(viewAs)
   const value = {
     session, profile, locations,
     user: session?.user || null,
-    role: profile?.role || 'newhire',
-    roles: [...new Set([profile?.role || 'newhire', ...(profile?.roles || [])])],
+    realRole, realRoles, viewAs, setViewAs, previewing,
+    role: previewing ? viewAs.split('+')[0] : realRole,
+    roles: previewing ? viewAs.split('+') : realRoles,
     locationId: profile?.location_id || null,
     refresh: () => loadProfile(session?.user),
     signOut: () => supabase.auth.signOut(),

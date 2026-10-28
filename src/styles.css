@@ -265,3 +265,9 @@ label.field span { display: block; font-size: 0.8rem; text-transform: uppercase;
   }
   .tabbar { padding-top: 24px; }
 }
+
+/* ---------- View as (owner preview) ---------- */
+.viewas { position: sticky; top: 62px; z-index: 9; display: flex; align-items: center; gap: 8px; padding: 6px 16px; background: var(--ink); border-bottom: 1px solid var(--line); }
+.viewas.on { background: linear-gradient(90deg, rgba(255,20,147,0.25), rgba(212,175,55,0.15)); border-bottom-color: var(--pink); }
+.viewas select { width: auto; min-height: 32px; padding: 4px 8px; font-size: 0.85rem; }
+@media (min-width: 900px) { .viewas { padding-left: 224px; } }
