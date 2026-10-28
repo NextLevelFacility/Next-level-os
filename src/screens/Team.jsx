@@ -26,6 +26,8 @@ export default function Team() {
   const [goalForm, setGoalForm] = useState(null)
   const [modsDone, setModsDone] = useState([])
   const [modsTotal, setModsTotal] = useState(0)
+  const [invites, setInvites] = useState([])
+  const [inviteForm, setInviteForm] = useState(null)
 
   async function load() {
     const { data } = await supabase.from('profiles').select('*').order('full_name'); setPeople(data || [])
@@ -40,6 +42,7 @@ export default function Team() {
         supabase.from('modules').select('id').eq('published', true),
       ])
       setReads(r || []); setTime(t || []); setSessions(s || []); setGoals(g || []); setModsDone(mp || []); setModsTotal((ms || []).length)
+      const { data: inv } = await supabase.from('team_invites').select('*').is('claimed_by', null).order('created_at'); setInvites(inv || [])
     }
   }
   useEffect(() => { load() }, [role, period])
@@ -58,6 +61,13 @@ export default function Team() {
     const rows = [['Name', 'Role', 'Hours', 'Sessions', 'Hourly rate', 'Per-session rate', 'Pay'], ...people.map(p => [p.full_name, p.role, hoursOf(p.id).toFixed(2), sessionsOf(p.id).length, p.pay_hourly || '', p.pay_per_session || '', payOf(p).toFixed(2)])]
     const blob = new Blob([rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `next-level-pay-${period}.csv`; a.click()
+  }
+  async function saveInvite(e) {
+    e.preventDefault()
+    const { id, claimed_by, claimed_at, created_at, ...rest } = inviteForm
+    const payload = { ...rest, email: rest.email ? rest.email.trim().toLowerCase() : null }
+    const { error } = id ? await supabase.from('team_invites').update(payload).eq('id', id) : await supabase.from('team_invites').insert(payload)
+    if (error) return alert(error.message); setInviteForm(null); load()
   }
   async function saveGoal(e) {
     e.preventDefault()
@@ -104,6 +114,27 @@ export default function Team() {
             </div>
           )
         })}
+        {manager && (
+          <div className="card" style={{ borderStyle: 'dashed' }}>
+            <div className="row between"><h2 style={{ margin: 0 }}>Not signed up yet</h2><button className="btn small" onClick={() => setInviteForm({ full_name: '', email: '', role: 'coach', roles: [], title: '', location_id: locations[0]?.id || null })}>+ Add teammate</button></div>
+            <p className="small muted">Send them the link. When they create an account with this name or email, their role is set automatically.</p>
+            {inviteForm && (
+              <form onSubmit={saveInvite} style={{ marginBottom: 10 }}>
+                <div className="row wrap" style={{ gap: 8 }}>
+                  <label className="field" style={{ flex: 1, minWidth: 140 }}><span>Name</span><input className="input" value={inviteForm.full_name} onChange={e => setInviteForm({ ...inviteForm, full_name: e.target.value })} required /></label>
+                  <label className="field" style={{ flex: 1, minWidth: 160 }}><span>Email (optional, more reliable)</span><input className="input" type="email" value={inviteForm.email || ''} onChange={e => setInviteForm({ ...inviteForm, email: e.target.value })} /></label>
+                  <label className="field"><span>Main role</span><select className="input" value={inviteForm.role} onChange={e => setInviteForm({ ...inviteForm, role: e.target.value })}>{Object.entries(ROLES).filter(([k]) => k !== 'owner').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+                </div>
+                <div className="row wrap" style={{ gap: 6, alignItems: 'center', marginBottom: 10 }}><span className="small muted">Also does:</span>{['coach', 'sales', 'frontdesk', 'director'].filter(r => r !== inviteForm.role).map(r => { const on = (inviteForm.roles || []).includes(r); return <button key={r} type="button" className={`chip gold ${on ? 'on' : ''}`} onClick={() => setInviteForm({ ...inviteForm, roles: on ? inviteForm.roles.filter(x => x !== r) : [...inviteForm.roles, r] })}>{ROLES[r]}</button> })}</div>
+                <div className="row" style={{ gap: 8 }}><button className="btn small">Save</button><button type="button" className="btn ghost small" onClick={() => setInviteForm(null)}>Cancel</button>{inviteForm.id && <button type="button" className="btn danger small" onClick={async () => { await supabase.from('team_invites').delete().eq('id', inviteForm.id); setInviteForm(null); load() }}>Remove</button>}</div>
+              </form>
+            )}
+            <ul className="list">
+              {invites.map(i => <li key={i.id}><span className="grow"><div style={{ fontWeight: 600 }}>{i.full_name} <span className="small muted">{i.email ? `· ${i.email}` : '· no email yet'}</span></div><div className="row wrap" style={{ gap: 4, marginTop: 2 }}><span className="pill pink">{ROLES[i.role]}</span>{(i.roles || []).map(r => <span key={r} className="pill gold">+ {ROLES[r]}</span>)}</div></span><button className="btn ghost small" onClick={() => setInviteForm(i)}>Edit</button></li>)}
+              {invites.length === 0 && <li className="muted small">Everyone has signed up.</li>}
+            </ul>
+          </div>
+        )}
       </>}
 
       {tab === 'pay' && manager && <>
