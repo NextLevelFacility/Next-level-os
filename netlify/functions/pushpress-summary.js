@@ -109,7 +109,31 @@ export const handler = async (event) => {
   if (!KEY()) return json(200, { connected: false, hint: 'Add PUSHPRESS_API_KEY in Netlify → Environment variables.' })
   let body = {}
   try { body = JSON.parse(event.body || '{}') } catch {}
+  if (body.debug && ctx.profile && ['owner', 'operator'].includes(ctx.profile.role)) return json(200, await debug())
   return json(200, await cached(ctx.sb, 'pushpress', () => summary(), { force: Boolean(body.force) }))
+}
+
+// Owner-only: which money endpoints this PushPress key can see (shape only, no values).
+async function debug() {
+  await probe()
+  const out = {}
+  for (const path of ['/payments', '/invoices', '/transactions', '/charges', '/orders', '/subscriptions', '/memberships', '/billing', '/revenue', '/reports/revenue', '/checkins', '/appointments', '/classes', '/events']) {
+    try {
+      const r = await fetch(`${BASE}${path}?limit=5&page=1`, { headers: headers() })
+      const d = await r.json().catch(() => null)
+      out[path] = `${r.status} · ${describe(d)}`
+    } catch (e) { out[path] = String(e.message) }
+  }
+  try {
+    const r = await fetch(`${BASE}/enrollments?limit=1&page=1`, { headers: headers() })
+    const d = await r.json(); const e = pickList(d)[0]
+    out.enrollmentSample = e && Object.fromEntries(Object.entries(e).map(([k, v]) => [k, typeof v === 'object' && v ? JSON.stringify(v).slice(0, 120) : (k === 'customerId' || k === 'id' ? '…' : v)]))
+  } catch {}
+  try {
+    const r = await fetch(`${BASE}/plans/${(await listAll('/enrollments')).list[0]?.planId}`, { headers: headers() })
+    const d = await r.json(); out.planSample = JSON.stringify(d).slice(0, 600)
+  } catch {}
+  return out
 }
 
 async function summary() {
