@@ -150,6 +150,31 @@ export const handler = async (event) => {
       return { connected: true, error: /authoriz|UNAUTHORIZED|ACCESS_TOKEN|FORBIDDEN/i.test(msg) ? await diagnoseAuth() : msg }
     }
   }
+  if (body.debug && ctx.profile && ['owner', 'operator'].includes(ctx.profile.role)) return json(200, await debug())
   if (body.days) return json(200, await run())              // the 90-day clinic pull is on demand, never cached
   return json(200, await cached(ctx.sb, 'square', run, { force: Boolean(body.force) }))
+}
+
+// Owner-only diagnostics: which Square locations the token sees, and today's money by three different routes.
+async function debug() {
+  const now = new Date(), t = tzParts(now)
+  const startToday = tzMidnight(t.y, t.m, t.d, now)
+  const out = { startToday: startToday.toISOString(), now: now.toISOString() }
+  try { const d = await sq('/locations'); out.locations = (d.locations || []).map(l => ({ id: l.id, name: l.name, status: l.status })) } catch (e) { out.locationsError = String(e.message) }
+  try {
+    let cursor, pays = []
+    do { const qs = new URLSearchParams({ begin_time: startToday.toISOString(), end_time: now.toISOString(), limit: '100' }); if (cursor) qs.set('cursor', cursor); const d = await sq(`/payments?${qs}`); pays = pays.concat(d.payments || []); cursor = d.cursor } while (cursor)
+    const byLoc = {}
+    for (const p of pays) { const k = p.location_id; byLoc[k] = byLoc[k] || { count: 0, amount: 0, statuses: {} }; byLoc[k].count++; byLoc[k].amount += (p.amount_money?.amount || 0) / 100; byLoc[k].statuses[p.status] = (byLoc[k].statuses[p.status] || 0) + 1 }
+    out.paymentsToday = { count: pays.length, amount: pays.reduce((a, p) => a + (p.amount_money?.amount || 0) / 100, 0), byLocation: byLoc }
+  } catch (e) { out.paymentsError = String(e.message) }
+  try {
+    const ids = await locationIds()
+    for (const states of [['COMPLETED'], ['OPEN'], ['CANCELED']]) {
+      const d = await sq('/orders/search', { method: 'POST', body: JSON.stringify({ location_ids: ids.slice(0, 10), limit: 500, return_entries: false, query: { filter: { date_time_filter: { created_at: { start_at: startToday.toISOString(), end_at: now.toISOString() } }, state_filter: { states } }, sort: { sort_field: 'CREATED_AT', sort_order: 'DESC' } } }) })
+      const os = d.orders || []
+      out['ordersToday_' + states[0]] = { count: os.length, amount: os.reduce((a, o) => a + orderTotal(o), 0), sample: os.slice(0, 3).map(o => ({ source: o.source?.name, created: o.created_at, closed: o.closed_at, total: orderTotal(o), items: (o.line_items || []).map(l => l.name).slice(0, 3) })) }
+    }
+  } catch (e) { out.ordersError = String(e.message) }
+  return out
 }
