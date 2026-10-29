@@ -53,6 +53,7 @@ function describe(d, depth = 0) {
 }
 const rawShapes = {}
 const planCache = new Map()   // planId → { name, category }, kept while the function instance is warm
+let memo = { at: 0, body: null }   // last good answer, reused for 2 minutes so every screen doesn't re-pull 500 people
 
 // Pull every page of a list endpoint. Returns { list, status } — status is the first HTTP status so callers can tell 404 (no such endpoint) from 401.
 async function listAll(path, params = {}) {
@@ -107,6 +108,7 @@ export const handler = async (event) => {
   if (!ctx) return json(401, { error: 'Sign in required' })
   if (!KEY()) return json(200, { connected: false, hint: 'Add PUSHPRESS_API_KEY in Netlify → Environment variables.' })
 
+  if (memo.body && Date.now() - memo.at < 120000) return json(200, { ...memo.body, cached: true })
   try {
     // 0) Can this key talk to PushPress at all?
     const pr = await probe()
@@ -154,7 +156,7 @@ export const handler = async (event) => {
     // Active members = people PushPress itself calls members (role). Falls back to unique customers on a running plan.
     const active = members.length || new Set(running.map(e => e.customerId)).size || null
 
-    return json(200, {
+    memo = { at: Date.now(), body: {
       connected: true,
       company: pr.company?.name || pr.company?.data?.name || null,
       active, total: customers.length, leads, ex_members: exMembers, cancelled_total: exMembers || canceled.length,
@@ -171,7 +173,8 @@ export const handler = async (event) => {
         enrollments: enrollments.length, enrollmentStatus: enrStatus, plansKnown: [...planCache.values()].filter(Boolean).length, enrollErr,
         raw: rawShapes,
       },
-    })
+    } }
+    return json(200, memo.body)
   } catch (e) {
     return json(200, { connected: true, error: String(e.message || e), shape: { auth: authStyle?.[0], raw: rawShapes } })
   }
