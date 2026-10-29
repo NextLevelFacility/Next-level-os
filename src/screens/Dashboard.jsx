@@ -86,10 +86,15 @@ export default function Dashboard() {
       {!pp ? <p className="muted">Loading PushPress…</p> : !pp.connected ? (
         <div className="card"><p className="muted">PushPress isn't connected yet. Add <code>PUSHPRESS_API_KEY</code> in Netlify → Environment variables to see active members and plans here.</p></div>
       ) : pp.error ? <div className="card"><p className="flag">PushPress: {pp.error}</p></div> : (
-        <div className="grid">
-          <Stat label="Active members" value={pp.active ?? '—'} tone="gold" />
-          {pp.plans?.slice(0, 5).map(([n, c]) => <Stat key={n} label={n} value={c} />)}
-        </div>
+        <>
+          <div className="grid">
+            <Stat label="Active members" value={pp.active ?? pp.total ?? '—'} tone="gold" sub={pp.active == null ? `${pp.total} people in PushPress` : 'from PushPress'} />
+            {pp.leads != null && <Stat label="Leads" value={pp.leads} />}
+            {pp.cancellations_month != null && <Stat label="Cancelled this month" value={pp.cancellations_month} tone={pp.cancellations_month ? 'pink' : ''} />}
+            {pp.plans?.slice(0, 4).map(([n, c]) => <Stat key={n} label={n} value={c} />)}
+          </div>
+          {pp.cancelled?.length > 0 && <div className="card"><h3>Cancelled in PushPress this month</h3><ul className="list">{pp.cancelled.slice(0, 10).map((c, i) => <li key={i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="small muted">{c.at ? new Date(c.at).toLocaleDateString() : ''}</span></li>)}</ul></div>}
+        </>
       )}
 
       <h2>Retention · this month</h2>

@@ -30,14 +30,35 @@ async function listOrders(ids) {
 }
 async function activeSubscriptions() {
   try {
-    const r = await fetch(`${SQ}/subscriptions/search`, { method: 'POST', headers: headers(), body: JSON.stringify({ query: { filter: {} }, limit: 200 }) })
-    const d = await r.json()
-    const subs = d.subscriptions || []
-    return { active: subs.filter(s => s.status === 'ACTIVE').length, total: subs.length }
+    let cursor, subs = []
+    do {
+      const body = { limit: 200 }
+      if (process.env.SQUARE_LOCATION_ID) body.query = { filter: { location_ids: [process.env.SQUARE_LOCATION_ID] } }
+      if (cursor) body.cursor = cursor
+      const r = await fetch(`${SQ}/subscriptions/search`, { method: 'POST', headers: headers(), body: JSON.stringify(body) })
+      const d = await r.json()
+      if (d.errors) return { active: null, total: null, error: d.errors.map(e => e.detail || e.code).join('; ') }
+      subs = subs.concat(d.subscriptions || []); cursor = d.cursor
+    } while (cursor)
+    return { active: subs.filter(s => s.status === 'ACTIVE').length, paused: subs.filter(s => s.status === 'PAUSED').length, total: subs.length }
   } catch { return { active: null, total: null } }
 }
 
 const sum = (ps) => ps.reduce((a, p) => a + (p.amount_money?.amount || 0), 0) / 100
+
+// Netlify functions run in UTC; the business day is Miami time.
+const TZ = process.env.BUSINESS_TZ || 'America/New_York'
+function tzParts(d) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).formatToParts(d)
+  const get = t => Number(parts.find(p => p.type === t)?.value || 0)
+  return { y: get('year'), m: get('month'), d: get('day'), h: get('hour') % 24, mi: get('minute'), s: get('second') }
+}
+// Midnight (in TZ) of the given local calendar day, as a real Date.
+function tzMidnight(y, m, d, ref = new Date()) {
+  const p = tzParts(ref)
+  const offset = Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - ref.getTime()   // TZ offset from UTC, in ms
+  return new Date(Date.UTC(y, m - 1, d) - offset)
+}
 
 exports.handler = async (event) => {
   const ctx = await requireUser(event)
@@ -45,10 +66,11 @@ exports.handler = async (event) => {
   if (!process.env.SQUARE_ACCESS_TOKEN) return json(200, { connected: false, hint: 'Add SQUARE_ACCESS_TOKEN in Netlify → Environment variables.' })
   try {
     const now = new Date()
-    const startToday = new Date(now); startToday.setHours(0, 0, 0, 0)
-    const start7 = new Date(startToday); start7.setDate(start7.getDate() - 6)
-    const startMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const start90 = new Date(startToday); start90.setDate(start90.getDate() - 90)
+    const t = tzParts(now)
+    const startToday = tzMidnight(t.y, t.m, t.d, now)
+    const start7 = new Date(startToday.getTime() - 6 * 864e5)
+    const startMonth = tzMidnight(t.y, t.m, 1, now)
+    const start90 = new Date(startToday.getTime() - 90 * 864e5)
     const payments = await listPayments(start90.toISOString(), now.toISOString())
     const orders = await listOrders([...new Set(payments.map(p => p.order_id).filter(Boolean))])
 
