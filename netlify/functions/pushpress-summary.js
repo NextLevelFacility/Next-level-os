@@ -125,7 +125,17 @@ export const handler = async (event) => {
     // 2) Enrollments = a customer on a plan (status: active, pending_cancel, paused, cancelled, completed…). Plans give the names.
     let enrollments = [], enrollErr = null, planNames = {}
     try { enrollments = (await listAll('/enrollments')).list } catch (e) { enrollErr = e.status || String(e.message) }
-    try { for (const pl of (await listAll('/plans')).list) planNames[pl.id] = pl.name || pl.title || pl.id } catch {}
+    const planProbe = {}
+    for (const path of ['/plans', '/plan', '/products', '/memberships', '/membership-plans', '/billing/plans']) {
+      try { const { list } = await listAll(path); planProbe[path] = `${list.length} · ${describe(list[0])}`; for (const pl of list) if (pl && pl.id) planNames[pl.id] = pl.name || pl.title || pl.id; if (list.length) break } catch (e) { planProbe[path] = e.status || String(e.message).slice(0, 80) }
+    }
+    rawShapes.planProbe = planProbe
+    const sampleMember = customers.find(c => norm(c.role) === 'member')
+    rawShapes.memberSample = describe(sampleMember)
+    rawShapes.membershipDetails = JSON.stringify(sampleMember?.membershipDetails || null).replace(/"[^"]*@[^"]*"/g, '"email"').slice(0, 600)
+    rawShapes.enrollmentSample = describe(enrollments[0])
+    try { const r = await fetch(`${BASE}/enrollments/${enrollments[0]?.id}`, { headers: headers() }); rawShapes.enrollmentGet = `${r.status} · ${describe(await r.json().catch(() => null))}` } catch {}
+    try { const r = await fetch(`${BASE}/plans/${enrollments[0]?.planId}`, { headers: headers() }); rawShapes.planGet = `${r.status} · ${describe(await r.json().catch(() => null))}` } catch {}
     const enrStatus = {}
     for (const e of enrollments) { const st = norm(e.status) || '(none)'; enrStatus[st] = (enrStatus[st] || 0) + 1 }
     const monthStart = since(), now = new Date()
