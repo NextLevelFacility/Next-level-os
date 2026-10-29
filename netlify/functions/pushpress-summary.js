@@ -88,7 +88,12 @@ const isActive = (s) => /^(active|alert|pending|paused|member|current|paid|trial
 const isCancelled = (s) => /cancel|former|inactive|terminated|expired|ended|completed|churn/.test(s) && !/^pending/.test(s)
 const isLead = (s) => /lead|prospect/.test(s)
 const dateOf = (o) => { for (const f of DATE_FIELDS) { if (o && o[f]) { const d = new Date(o[f]); if (!isNaN(d)) return d } } return null }
-const nameOf = (c) => (c.name || [c.firstName || c.first_name, c.lastName || c.last_name].filter(Boolean).join(' ') || c.email || c.id || '').trim()
+const nameOf = (c) => {
+  if (!c) return ''
+  const n = c.name
+  if (n && typeof n === 'object') return [n.first || n.firstName || n.given, n.last || n.lastName || n.family].filter(Boolean).join(' ').trim() || String(n.full || n.display || '')
+  return String(n || [c.firstName || c.first_name, c.lastName || c.last_name].filter(Boolean).join(' ') || c.email || c.id || '').trim()
+}
 const planOf = (o) => {
   const p = o.plan ?? o.membership ?? o.subscription?.plan ?? o.planName ?? o.plan_name ?? o.membershipName ?? o.product ?? o.membershipType
   if (!p) return null
