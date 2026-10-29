@@ -88,12 +88,19 @@ export default function Dashboard() {
       ) : pp.error ? <div className="card"><p className="flag">PushPress: {pp.error}</p></div> : (
         <>
           <div className="grid">
-            <Stat label="Active members" value={pp.active ?? pp.total ?? '—'} tone="gold" sub={pp.active == null ? `${pp.total} people in PushPress` : 'from PushPress'} />
-            {pp.leads != null && <Stat label="Leads" value={pp.leads} />}
+            <Stat label="Active members" value={pp.active ?? pp.total ?? '—'} tone="gold" sub={pp.active_enrollments ? `${pp.active_enrollments} active plans` : 'from PushPress'} />
+            {pp.leads != null && <Stat label="Leads" value={pp.leads} sub="in PushPress" />}
             {pp.cancellations_month != null && <Stat label="Cancelled this month" value={pp.cancellations_month} tone={pp.cancellations_month ? 'pink' : ''} />}
-            {pp.plans?.slice(0, 4).map(([n, c]) => <Stat key={n} label={n} value={c} />)}
+            {pp.pending_cancel != null && <Stat label="Leaving" value={pp.pending_cancel} tone={pp.pending_cancel ? 'pink' : ''} sub="pending cancel · save them" />}
+            {pp.ex_members != null && <Stat label="Ex-members" value={pp.ex_members} sub="win-back list" />}
           </div>
-          {pp.cancelled?.length > 0 && <div className="card"><h3>Cancelled in PushPress this month</h3><ul className="list">{pp.cancelled.slice(0, 10).map((c, i) => <li key={i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="small muted">{c.at ? new Date(c.at).toLocaleDateString() : ''}</span></li>)}</ul></div>}
+          {pp.plans?.length > 0 && <div className="card"><h3>Members by plan</h3><ul className="list">{pp.plans.map(([n, c]) => <li key={n}><span className="grow">{n}</span><b>{c}</b></li>)}</ul></div>}
+          {(pp.leaving?.length > 0 || pp.cancelled?.length > 0) && (
+            <div className="card">
+              {pp.leaving?.length > 0 && <><h3>Pending cancel · call them this week</h3><ul className="list">{pp.leaving.slice(0, 10).map((c, i) => <li key={'l' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="pill pink">{c.at ? 'ends ' + new Date(c.at).toLocaleDateString() : 'ending'}</span></li>)}</ul></>}
+              {pp.cancelled?.length > 0 && <><h3 style={{ marginTop: 12 }}>Cancelled this month</h3><ul className="list">{pp.cancelled.slice(0, 10).map((c, i) => <li key={'c' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="small muted">{c.at ? new Date(c.at).toLocaleDateString() : ''}</span></li>)}</ul></>}
+            </div>
+          )}
         </>
       )}
 

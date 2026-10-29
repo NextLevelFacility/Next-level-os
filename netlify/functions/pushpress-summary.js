@@ -108,49 +108,55 @@ export const handler = async (event) => {
       return json(200, { connected: true, error: `PushPress rejected the API key (${pr.tried.join(', ')}). In PushPress go to Settings → Security & Access → API keys, create a key, and paste the whole key into Netlify as PUSHPRESS_API_KEY (no spaces). If your key covers more than one gym, also add PUSHPRESS_COMPANY_ID.` })
     }
 
-    // 1) Customers: members, former members and leads
+    // 1) Customers. PushPress tags each person with a role: member, lead, non-member, ex-member, coach, admin.
     const { list: customers } = await listAll('/customers')
-    const statusValues = {}
-    for (const c of customers) { const s = statusOf(c) || '(none)'; statusValues[s] = (statusValues[s] || 0) + 1 }
-    const statusField = STATUS_FIELDS.find(f => customers.some(c => c && c[f] != null && typeof c[f] !== 'object')) || null
+    const byId = new Map(customers.map(c => [c.id, c]))
+    const roleCounts = {}
+    for (const c of customers) { const r = norm(c.role) || '(none)'; roleCounts[r] = (roleCounts[r] || 0) + 1 }
+    const members = customers.filter(c => norm(c.role) === 'member')
+    const leads = customers.filter(c => isLead(norm(c.role))).length
+    const exMembers = customers.filter(c => /^ex[-_ ]?member|former/.test(norm(c.role))).length
 
-    // 2) Enrollments (memberships on a plan), when the key can see them. Gives plan names and cancellation dates.
-    let enrollments = null, enrollErr = null
+    // 2) Enrollments = a customer on a plan (status: active, pending_cancel, paused, cancelled, completed…). Plans give the names.
+    let enrollments = [], enrollErr = null, planNames = {}
     try { enrollments = (await listAll('/enrollments')).list } catch (e) { enrollErr = e.status || String(e.message) }
-    const monthStart = since()
+    try { for (const pl of (await listAll('/plans')).list) planNames[pl.id] = pl.name || pl.title || pl.id } catch {}
+    const enrStatus = {}
+    for (const e of enrollments) { const st = norm(e.status) || '(none)'; enrStatus[st] = (enrStatus[st] || 0) + 1 }
+    const monthStart = since(), now = new Date()
+    const planLabel = (e) => planNames[e.planId] || planOf(e) || (e.planId ? `Plan ${String(e.planId).slice(-6)}` : 'Member')
+    const endOf = (e) => { const d = dateOf(e); return d }
+    const enrName = (e) => nameOf(byId.get(e.customerId) || e.customer || e) || 'Member'
 
-    let active = null, total = customers.length, leads = null, cancelledAll = null, cancelled = [], plans = {}
-    if (enrollments && enrollments.length) {
-      const activeEnr = enrollments.filter(e => isActive(statusOf(e)) || (!statusOf(e) && !dateOf(e)))
-      const ids = new Set(activeEnr.map(e => e.customerId || e.customer_id || e.customer?.id || e.userId || e.id))
-      active = ids.size
-      for (const e of activeEnr) { const p = planOf(e) || 'Member'; plans[p] = (plans[p] || 0) + 1 }
-      cancelled = enrollments.filter(e => isCancelled(statusOf(e))).map(e => ({ name: nameOf(e.customer || e), plan: planOf(e), at: dateOf(e)?.toISOString() || null })).filter(x => x.at && new Date(x.at) >= monthStart)
-      cancelledAll = enrollments.filter(e => isCancelled(statusOf(e))).length
-    }
-    if (active == null && statusField) {
-      active = customers.filter(c => isActive(statusOf(c))).length
-      leads = customers.filter(c => isLead(statusOf(c))).length
-      cancelledAll = customers.filter(c => isCancelled(statusOf(c))).length
-      for (const c of customers.filter(c => isActive(statusOf(c)))) { const p = planOf(c) || 'Member'; plans[p] = (plans[p] || 0) + 1 }
-      if (!cancelled.length) cancelled = customers.filter(c => isCancelled(statusOf(c))).map(c => ({ name: nameOf(c), plan: planOf(c), at: dateOf(c)?.toISOString() || null })).filter(x => x.at && new Date(x.at) >= monthStart)
-    }
-    if (active == null) {
-      // No status anywhere: treat everyone the API returns as a customer and let the Owner keep the manual count for churn.
-      active = null
-    }
+    const activeEnr = enrollments.filter(e => isActive(norm(e.status)))
+    const pendingCancel = enrollments.filter(e => /^pending[_ -]?cancel/.test(norm(e.status)))
+    const plans = {}
+    for (const e of activeEnr) { const n = planLabel(e); plans[n] = (plans[n] || 0) + 1 }
+    // Cancelled this month = enrollment cancelled whose end date landed in this month (not completed passes/clinics)
+    const cancelledEnr = enrollments.filter(e => /cancel/.test(norm(e.status)) && !/^pending/.test(norm(e.status)))
+    const cancelled = cancelledEnr.map(e => ({ name: enrName(e), plan: planLabel(e), at: endOf(e)?.toISOString() || null }))
+      .filter(x => x.at && new Date(x.at) >= monthStart && new Date(x.at) <= new Date(now.getTime() + 864e5))
+    const leaving = pendingCancel.map(e => ({ name: enrName(e), plan: planLabel(e), at: (e.endDate ? new Date(e.endDate) : null)?.toISOString() || null }))
+
+    // Active members: people PushPress calls members; fall back to unique customers on an active enrollment.
+    const active = members.length || new Set(activeEnr.map(e => e.customerId)).size || null
+    const total = customers.length
+    const cancelledAll = exMembers || cancelledEnr.length
 
     return json(200, {
       connected: true,
-      active, total, leads, cancelled_total: cancelledAll,
-      plans: Object.entries(plans).sort((a, b) => b[1] - a[1]).slice(0, 10),
-      cancellations_month: active == null ? null : cancelled.length,
-      cancelled: cancelled.sort((a, b) => (b.at || '').localeCompare(a.at || '')).slice(0, 50),
-      asOf: new Date().toISOString(),
       company: pr.company?.name || pr.company?.data?.name || null,
+      active, total, leads, ex_members: exMembers, cancelled_total: cancelledAll,
+      active_enrollments: activeEnr.length,
+      plans: Object.entries(plans).sort((a, b) => b[1] - a[1]).slice(0, 10),
+      cancellations_month: cancelled.length,
+      cancelled: cancelled.sort((a, b) => (b.at || '').localeCompare(a.at || '')).slice(0, 50),
+      pending_cancel: pendingCancel.length,
+      leaving: leaving.sort((a, b) => (a.at || '').localeCompare(b.at || '')).slice(0, 50),
+      asOf: now.toISOString(),
       shape: {   // diagnostics only — key names and counts, never member data
-        auth: authStyle?.[0], customers: customers.length, customerKeys: Object.keys(customers[0] || {}).slice(0, 40), statusField, statusValues,
-        enrollments: enrollments ? enrollments.length : null, enrollmentKeys: Object.keys((enrollments || [])[0] || {}).slice(0, 40), enrollErr,
+        auth: authStyle?.[0], customers: customers.length, roleCounts,
+        enrollments: enrollments.length, enrollmentStatus: enrStatus, plansKnown: Object.keys(planNames).length, enrollErr,
         raw: rawShapes,
       },
     })
