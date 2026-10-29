@@ -75,10 +75,19 @@ export default function Dashboard() {
             <Stat label="Today" value={money(sq.today.sales)} tone="pink" sub={`${sq.today.count} payments`} />
             <Stat label="Last 7 days" value={money(sq.week.sales)} sub={`${sq.week.count} payments`} />
             <Stat label="Month to date" value={money(sq.month.sales)} tone="gold" sub={`${sq.month.count} payments`} />
-            <Stat label="Memberships · MTD" value={money(sq.month.memberships)} sub="items with member/program in the name" />
-            <Stat label="Active subscriptions" value={sq.subscriptions?.active ?? '—'} sub="Square subscriptions" />
+            {sq.subscriptions?.total > 0 && <Stat label="Square subscriptions" value={sq.subscriptions.active} sub={`active · ${sq.subscriptions.paused || 0} paused`} />}
           </div>
-          {sq.items?.length > 0 && <div className="card"><h3>What sold this month</h3><ul className="list">{sq.items.map(([n, v]) => <li key={n}><span className="grow">{n}</span><b>{money(v)}</b></li>)}</ul></div>}
+          {sq.month.cats && (
+            <div className="card">
+              <div className="row between"><h3>This month · where the money came from</h3><span className="small muted">last 7 days in grey</span></div>
+              <div className="grid">
+                {Object.entries(sq.month.cats).filter(([, v]) => v.amount > 0 || v.count > 0).sort((a, b) => b[1].amount - a[1].amount).map(([n, v]) => (
+                  <Stat key={n} label={n} value={money(v.amount)} tone={/rental|party/i.test(n) ? 'gold' : ''} sub={`${v.count} ${/concession/i.test(n) ? 'items' : /party/i.test(n) ? 'parties' : /rental/i.test(n) ? 'rentals' : 'sold'} · 7d ${money(sq.week.cats?.[n]?.amount || 0)}`} />
+                ))}
+              </div>
+            </div>
+          )}
+          {sq.items?.length > 0 && <div className="card"><h3>Top items this month</h3><ul className="list">{sq.items.slice(0, 10).map(([n, v]) => <li key={n}><span className="grow">{n}</span><b>{money(v)}</b></li>)}</ul></div>}
         </>
       )}
 

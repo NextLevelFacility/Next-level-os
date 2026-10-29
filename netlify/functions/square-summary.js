@@ -88,20 +88,33 @@ export const handler = async (event) => {
     const inRange = (p, from) => new Date(p.created_at) >= from
     const todayP = payments.filter(p => inRange(p, startToday)), weekP = payments.filter(p => inRange(p, start7)), monthP = payments.filter(p => inRange(p, startMonth))
 
-    // Item breakdown this month (what sold)
-    const items = {}
-    const membershipWords = /member|semi|private|homeschool|monthly|program|speed/i
-    let membershipMonth = 0
-    for (const p of monthP) {
-      const o = orders[p.order_id]
-      for (const li of o?.line_items || []) {
-        const name = li.name || 'Other'
-        const amt = (li.total_money?.amount || 0) / 100
-        items[name] = (items[name] || 0) + amt
-        if (membershipWords.test(name)) membershipMonth += amt
+    // What Square actually sells at Next Level: rentals, parties, concession, training packs, clinics. Memberships bill through PushPress.
+    const CATS = [
+      ['Field rentals', /field\s*rental|plei|pitch rental|rental \(/i],
+      ['Birthday parties', /birthday|bday|party/i],
+      ['Boot rentals', /boot/i],
+      ['Clinics & camps', /clinic|camp|blueprint|thanksgiving|winter|spring break|summer/i],
+      ['Training', /x\s*\/\s*week|session pack|sessions?\b|semi|private|program|rehab|paid in full|first month|homeschool|speed|training|membership|member/i],
+    ]
+    const catOf = (name) => (CATS.find(([, re]) => re.test(name || '')) || ['Concession & other'])[0]
+    const emptyCats = () => Object.fromEntries([...CATS.map(c => c[0]), 'Concession & other'].map(c => [c, { amount: 0, count: 0 }]))
+    const breakdown = (ps) => {
+      const cats = emptyCats(), items = {}
+      for (const p of ps) {
+        const o = orders[p.order_id]
+        const lis = o?.line_items || []
+        if (!lis.length) { cats['Concession & other'].amount += (p.amount_money?.amount || 0) / 100; cats['Concession & other'].count += 1; continue }
+        for (const li of lis) {
+          const name = li.name || 'Other', amt = (li.total_money?.amount || 0) / 100, qty = Number(li.quantity || 1)
+          items[name] = (items[name] || 0) + amt
+          const c = cats[catOf(name)]; c.amount += amt; c.count += qty
+        }
       }
+      return { cats, items: Object.entries(items).sort((a, b) => b[1] - a[1]).slice(0, 15) }
     }
-    // Clinic sign-ups by keyword (last 90 days)
+    const monthB = breakdown(monthP), weekB = breakdown(weekP), todayB = breakdown(todayP)
+
+    // Every line item sold in the last 90 days, for clinic sign-up matching by keyword
     const clinics = {}
     for (const p of payments) {
       const o = orders[p.order_id]
@@ -115,10 +128,10 @@ export const handler = async (event) => {
     const subs = await activeSubscriptions()
     return json(200, {
       connected: true,
-      today: { sales: sum(todayP), count: todayP.length },
-      week: { sales: sum(weekP), count: weekP.length },
-      month: { sales: sum(monthP), count: monthP.length, memberships: membershipMonth },
-      items: Object.entries(items).sort((a, b) => b[1] - a[1]).slice(0, 12),
+      today: { sales: sum(todayP), count: todayP.length, cats: todayB.cats },
+      week: { sales: sum(weekP), count: weekP.length, cats: weekB.cats },
+      month: { sales: sum(monthP), count: monthP.length, cats: monthB.cats, memberships: monthB.cats['Training'].amount },
+      items: monthB.items,
       lineItems: clinics,
       subscriptions: subs,
       asOf: now.toISOString(),
