@@ -30,6 +30,29 @@ async function probe() {
   return { ok: false, tried }
 }
 
+// The list can sit at the top level, under data/results/items, or one level deeper ({ data: { customers: [...] } }).
+const LIST_KEYS = ['data', 'results', 'items', 'customers', 'enrollments', 'resultArray', 'records', 'rows']
+function pickList(d) {
+  if (Array.isArray(d)) return d
+  if (!d || typeof d !== 'object') return []
+  for (const k of LIST_KEYS) if (Array.isArray(d[k])) return d[k]
+  for (const v of Object.values(d)) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      for (const k of LIST_KEYS) if (Array.isArray(v[k])) return v[k]
+      const arr = Object.values(v).find(Array.isArray); if (arr) return arr
+    }
+  }
+  return Object.values(d).find(Array.isArray) || []
+}
+// Shape of a response for diagnostics: key → type (arrays show length, objects show their keys). No values.
+function describe(d, depth = 0) {
+  if (Array.isArray(d)) return `array(${d.length})${d.length && depth < 2 ? ' of ' + describe(d[0], depth + 1) : ''}`
+  if (!d || typeof d !== 'object') return typeof d
+  if (depth >= 2) return 'object'
+  return '{' + Object.entries(d).slice(0, 25).map(([k, v]) => `${k}: ${describe(v, depth + 1)}`).join(', ') + '}'
+}
+const rawShapes = {}
+
 // Pull every page of a list endpoint. Returns { list, status } — status is the first HTTP status so callers can tell 404 (no such endpoint) from 401.
 async function listAll(path, params = {}) {
   const out = []
@@ -46,7 +69,8 @@ async function listAll(path, params = {}) {
       throw err
     }
     const d = await r.json().catch(() => ({}))
-    const list = Array.isArray(d) ? d : (d.data || d.results || d.items || d.customers || d.enrollments || [])
+    if (page === 1) rawShapes[path] = describe(d)
+    const list = pickList(d)
     out.push(...list)
     const more = d.hasMore ?? d.has_more ?? d.pagination?.hasMore ?? d.meta?.hasMore
     if (more === false || list.length < PAGE) break
@@ -127,9 +151,10 @@ export const handler = async (event) => {
       shape: {   // diagnostics only — key names and counts, never member data
         auth: authStyle?.[0], customers: customers.length, customerKeys: Object.keys(customers[0] || {}).slice(0, 40), statusField, statusValues,
         enrollments: enrollments ? enrollments.length : null, enrollmentKeys: Object.keys((enrollments || [])[0] || {}).slice(0, 40), enrollErr,
+        raw: rawShapes,
       },
     })
   } catch (e) {
-    return json(200, { connected: true, error: String(e.message || e) })
+    return json(200, { connected: true, error: String(e.message || e), shape: { auth: authStyle?.[0], raw: rawShapes } })
   }
 }
