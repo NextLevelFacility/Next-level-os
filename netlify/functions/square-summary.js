@@ -5,6 +5,7 @@ import { requireUser, json } from './_auth.js'
 const SQ = 'https://connect.squareup.com/v2'
 const TOKEN = () => (process.env.SQUARE_ACCESS_TOKEN || '').trim()
 const headers = () => ({ Authorization: `Bearer ${TOKEN()}`, 'Content-Type': 'application/json', 'Square-Version': '2025-01-23' })
+let memo = { at: 0, body: null }   // last good answer, reused for 2 minutes (90 days of payments is a slow pull)
 
 // When Square says "could not be authorized", work out why without exposing the token.
 async function diagnoseAuth() {
@@ -75,6 +76,7 @@ export const handler = async (event) => {
   const ctx = await requireUser(event)
   if (!ctx) return json(401, { error: 'Sign in required' })
   if (!TOKEN()) return json(200, { connected: false, hint: 'Add SQUARE_ACCESS_TOKEN in Netlify → Environment variables.' })
+  if (memo.body && Date.now() - memo.at < 120000) return json(200, { ...memo.body, cached: true })
   try {
     const now = new Date()
     const t = tzParts(now)
@@ -126,7 +128,7 @@ export const handler = async (event) => {
       }
     }
     const subs = await activeSubscriptions()
-    return json(200, {
+    memo = { at: Date.now(), body: {
       connected: true,
       today: { sales: sum(todayP), count: todayP.length, cats: todayB.cats },
       week: { sales: sum(weekP), count: weekP.length, cats: weekB.cats },
@@ -135,7 +137,8 @@ export const handler = async (event) => {
       lineItems: clinics,
       subscriptions: subs,
       asOf: now.toISOString(),
-    })
+    } }
+    return json(200, memo.body)
   } catch (e) {
     const msg = String(e.message || e)
     const error = /authoriz|UNAUTHORIZED|ACCESS_TOKEN/i.test(msg) ? await diagnoseAuth() : msg
