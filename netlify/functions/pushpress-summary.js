@@ -117,13 +117,15 @@ export const handler = async (event) => {
 async function debug() {
   await probe()
   const out = {}
+  let customers = []
+  try { customers = (await listAll('/customers')).list.slice(0, 1) } catch {}
   // Events (clinics) and whoever is registered on them
   try {
     const r = await fetch(`${BASE}/events?limit=50&page=1`, { headers: headers() }); const d = await r.json(); const evs = pickList(d)
     out.events = { count: evs.length, keys: Object.keys(evs[0] || {}), sample: evs.slice(0, 6).map(e => Object.fromEntries(Object.entries(e).map(([k, v]) => [k, typeof v === 'object' && v ? JSON.stringify(v).slice(0, 160) : v]))) }
     const ev = evs.find(e => /clinic|camp|thanksgiving/i.test(JSON.stringify(e))) || evs[0]
     if (ev) {
-      for (const path of [`/events/${ev.id}`, `/events/${ev.id}/registrations`, `/events/${ev.id}/attendees`, `/events/${ev.id}/customers`, `/events/${ev.id}/checkins`, `/registrations?eventId=${ev.id}`, `/event-registrations?eventId=${ev.id}`, `/checkins?eventId=${ev.id}`, `/checkins?limit=5`, `/classes/${ev.id}/attendees`]) {
+      for (const path of [`/events/${ev.id}/reservations`, `/reservations?eventId=${ev.id}`, `/reservations?calendarItemId=${ev.id}`, `/reservations`, `/bookings?eventId=${ev.id}`, `/bookings`, `/check-ins?eventId=${ev.id}`, `/check-ins`, `/checkins?calendarItemId=${ev.id}`, `/checkins?type=event`, `/checkins?type=class`, `/events/${ev.id}/roster`, `/events/${ev.id}/members`, `/events/${ev.id}/signups`, `/classes/${ev.id}/reservations`, `/calendar/events/${ev.id}/reservations`, `/customers/${customers[0]?.id}/checkins`, `/customers/${customers[0]?.id}/reservations`]) {
         try { const r2 = await fetch(`${BASE}${path}${path.includes('?') ? '&' : '?'}limit=5`, { headers: headers() }); const d2 = await r2.json().catch(() => null); out['probe ' + path] = `${r2.status} · ${describe(d2)}` } catch (e) { out['probe ' + path] = String(e.message) }
       }
     }
