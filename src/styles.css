@@ -179,7 +179,7 @@ label.field span { display: block; font-size: 0.8rem; color: var(--muted); margi
 .sheet a svg { width: 22px; height: 22px; }
 .side-extra { display: none; }
 @media (min-width: 900px) {
-  .tabbar > a:last-of-type { display: none; }       /* the More button */
+  .tabbar > a.more { display: none; }       /* the More button */
   .side-extra { display: contents; }
   .sheet-backdrop { display: none; }
 }
@@ -300,3 +300,10 @@ label.field span { display: block; font-size: 0.8rem; color: var(--muted); margi
 .goal .acts { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
 .goal .acts .btn.small { min-height: 30px; padding: 4px 10px; font-size: 0.8rem; }
 .goal .acts .input { width: 70px; min-height: 30px; padding: 4px 8px; font-size: 0.85rem; }
+
+/* ---------- KPI tables ---------- */
+table.kpi { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+table.kpi th { text-align: right; font-weight: 500; color: var(--muted); font-size: 0.74rem; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.kpi th:first-child, table.kpi td:first-child { text-align: left; padding-left: 0; }
+table.kpi td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.kpi tr:last-child td { border-bottom: none; }

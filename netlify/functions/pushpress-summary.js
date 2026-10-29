@@ -213,6 +213,41 @@ async function summary(sb) {
     const alertIds = new Set(alerts.map(e => e.customerId).filter(Boolean))
     const active = enrollments.length ? activeIds.size : (members.length || null)
 
+    // 4) New memberships this month and last — commission goes to whoever the customer is assigned to in PushPress.
+    //    Rule (Gabriel): sales earn 12% on new Soccer Semi-Private memberships only.
+    const staffById = new Map(customers.filter(c => /coach|admin|staff|owner|manager/.test(norm(c.role))).map(c => [c.id, nameOf(c)]))
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const started = (e) => e.startDate ? new Date(e.startDate) : null
+    const memberships = enrollments.filter(e => started(e) && started(e) >= prevMonthStart && started(e) <= now).map(e => {
+      const c = byId.get(e.customerId); const plan = planLabel(e); const price = priceOf(e)
+      const semi = /semi.?private/i.test(plan) || /semi.?private/i.test(planCache.get(e.planId)?.category || '')
+      return { name: enrName(e), plan, price, started: e.startDate, month: started(e) >= monthStart ? 'this' : 'last', status: st(e), staff: staffById.get(c?.assignedToStaffId) || (c?.assignedToStaffId ? 'Unknown staff' : 'Unassigned'), semiPrivate: semi, commission: semi && price != null ? +(price * 0.12).toFixed(2) : 0 }
+    }).sort((a, b) => String(b.started).localeCompare(String(a.started)))
+    const byStaff = {}
+    for (const m of memberships) { const k = m.staff; byStaff[k] = byStaff[k] || { this: { count: 0, semi: 0, sales: 0, commission: 0 }, last: { count: 0, semi: 0, sales: 0, commission: 0 } }; const b = byStaff[k][m.month]; b.count++; if (m.semiPrivate) { b.semi++; b.sales += m.price || 0; b.commission += m.commission } }
+
+    // 5) Clinics & camps: PushPress events and who reserved a spot (grouped by title; multi-day clinics are several events with one name)
+    let clinics = [], clinicErr = null
+    try {
+      const evs = (await listAll('/events')).list.filter(e => e.start && e.start * 1000 >= now.getTime() - 45 * 864e5 && e.start * 1000 <= now.getTime() + 400 * 864e5)
+      const groups = {}
+      for (const e of evs) { const t = (e.title || 'Event').trim(); const g = groups[t] = groups[t] || { title: t, ids: [], starts: e.start, ends: e.end || e.start }; g.ids.push(e.id); g.starts = Math.min(g.starts, e.start); g.ends = Math.max(g.ends, e.end || e.start) }
+      const list = Object.values(groups).sort((a, b) => a.starts - b.starts).slice(0, 25)
+      let budget = 70
+      for (const g of list) {
+        const people = new Map()
+        const ids = g.ids.slice(0, Math.max(1, Math.min(g.ids.length, budget)))
+        budget -= ids.length
+        await Promise.all(ids.map(async (id) => {
+          try { const { list: res } = await listAll('/reservations', { calendarItemId: id }); for (const r of res) { const status = norm(r.status || r.state); if (/cancel|waitlist/.test(status)) continue; const cid = r.customerId || r.customer?.id || r.id; people.set(cid, { name: nameOf(byId.get(r.customerId) || r.customer || r) || 'Member', status }) } } catch {}
+        }))
+        g.signups = people.size; g.names = [...people.values()].map(p => p.name).sort(); g.sessions = g.ids.length; delete g.ids
+        g.starts = new Date(g.starts * 1000).toISOString(); g.ends = new Date(g.ends * 1000).toISOString()
+      }
+      clinics = list
+      rawShapes.reservationKeys = Object.keys((await listAll('/reservations', { calendarItemId: evs[0]?.id })).list[0] || {})
+    } catch (e) { clinicErr = String(e.message) }
+
     return {
       connected: true,
       company: pr.company?.name || pr.company?.data?.name || null,
@@ -234,6 +269,8 @@ async function summary(sb) {
       pending_cancel: leaving.length,
       leaving: leaving.sort((a, b) => (a.at || '').localeCompare(b.at || '')).slice(0, 50),
       asOf: now.toISOString(),
+      memberships, commission: { pct: 12, rule: '12% on new Soccer Semi-Private memberships, credited to the assigned staff in PushPress', byStaff },
+      clinics, clinicErr,
       shape: {   // diagnostics only — key names and counts, never member data
         auth: authStyle?.[0], customers: customers.length, roleCounts,
         enrollments: enrollments.length, enrollmentStatus: enrStatus, plansKnown: [...planCache.values()].filter(Boolean).length, enrollErr,

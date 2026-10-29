@@ -28,8 +28,8 @@ export default function Playbook() {
 
   return (
     <>
-      <h1>Playbook</h1>
-      <p className="muted">The standards and procedures Next Level runs on.</p>
+      <div className="row between wrap"><h1>{isManager(roles) ? 'Playbook' : 'SOPs'}</h1><div className="row" style={{ gap: 6 }}>{(roles.includes('coach') || roles.includes('director') || isManager(roles)) && <Link className="btn ghost small" to="/method">Training modules</Link>}<Link className="btn ghost small" to="/reports">Report an injury</Link></div></div>
+      <p className="muted">The standards and procedures Next Level runs on. Read each one for your role and mark it done.</p>
       <input className="input" placeholder="Search the playbook…" value={q} onChange={e => setQ(e.target.value)} style={{ marginBottom: 14 }} />
       {mineTotal > 0 && (
         <div className="card accent">

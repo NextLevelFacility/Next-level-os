@@ -21,7 +21,7 @@ export default function Settings() {
         <label className="field"><span>Phone (so your manager can reach you)</span><input className="input" value={phone} onChange={e => setPhone(e.target.value)} /></label>
         <button className="btn">Save</button> {msg && <span className="small" style={{ marginLeft: 10, color: 'var(--gold)' }}>{msg}</span>}
       </form>
-      <p className="small muted">Your role and location are set by the Owner or Operator on the Team page.</p>
+      <p className="small muted">Your role is set by the Owner.</p>
     </>
   )
 }

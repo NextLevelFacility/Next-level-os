@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
-import { supabase, today, ROLES, hours, fmtDate } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import { callFn, money } from '../lib/api'
-import ClinicBoard from '../components/ClinicBoard.jsx'
+import SheetsKpis from '../components/SheetsKpis.jsx'
+import PayCard from '../components/PayCard.jsx'
+import ClinicsCard from '../components/ClinicsCard.jsx'
 import { loadComp, loadRetention, pct } from '../lib/comp'
 
 const daysAgo = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
-const weekStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString() }
 
 export default function Dashboard() {
   const { role, locationId, locations } = useAuth()
@@ -16,42 +17,28 @@ export default function Dashboard() {
   const [sq, setSq] = useState(null)
   const [pp, setPp] = useState(null)
   const [ghl, setGhl] = useState(null)
+  const [sheets, setSheets] = useState(null)
   const [ret, setRet] = useState(null)
   const [comp, setComp] = useState(null)
 
-  useEffect(() => { callFn('square-summary').then(setSq); callFn('pushpress-summary').then(setPp); callFn('ghl-summary').then(setGhl); loadComp().then(async c => { setComp(c); setRet(await loadRetention(c, { allLocations: true })) }) }, [])
+  useEffect(() => { callFn('square-summary').then(setSq); callFn('pushpress-summary').then(setPp); callFn('ghl-summary').then(setGhl); callFn('sheets-summary').then(setSheets).catch(() => setSheets({ error: 'unavailable' })); loadComp().then(async c => { setComp(c); setRet(await loadRetention(c, { allLocations: true })) }) }, [])
   useEffect(() => {
     (async () => {
       const scope = q => loc === 'all' ? q : q.eq('location_id', loc)
-      const [{ data: reports }, { data: runs }, { data: templates }, { data: hires }, { data: people }, { data: goals }, { data: kpis }, { data: time }, { data: sessions }, { data: questions }, { data: salesLog }] = await Promise.all([
-        scope(supabase.from('reports').select('*, profiles(full_name)')).gte('report_date', daysAgo(7)).order('created_at', { ascending: false }),
-        scope(supabase.from('checklist_runs').select('*')).eq('run_date', today()),
-        supabase.from('checklist_templates').select('id, name, slot, role').eq('active', true),
-        scope(supabase.from('hires').select('*, onboarding_tasks(done)')).neq('status', 'complete'),
-        scope(supabase.from('profiles').select('id, full_name, role, roles, location_id')),
-        supabase.from('kpi_goals').select('*').eq('active', true).order('sort'),
-        scope(supabase.from('kpi_days').select('*')).eq('kpi_date', today()),
-        scope(supabase.from('time_entries').select('*, profiles(full_name)')).gte('clock_in', weekStart()),
-        scope(supabase.from('sessions').select('id, coach_id, session_date, session_athletes(count)')).gte('session_date', daysAgo(7)),
+      const [{ data: reports }, { data: questions }, { data: people }, { data: invites }] = await Promise.all([
+        scope(supabase.from('reports').select('*, profiles(full_name)')).gte('report_date', daysAgo(30)).order('created_at', { ascending: false }),
         supabase.from('ai_questions').select('question, created_at, profiles(full_name)').order('created_at', { ascending: false }).limit(8),
-        scope(supabase.from('sales_log').select('*, profiles(full_name)')).gte('log_date', daysAgo(7)).order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id, full_name, role, roles, title, pay_hourly, pay_per_session, pay_commission_pct').neq('role', 'owner'),
+        supabase.from('team_invites').select('*').is('claimed_by', null),
       ])
-      setD({ reports: reports || [], runs: runs || [], templates: templates || [], hires: hires || [], people: people || [], goals: goals || [], kpis: kpis || [], time: time || [], sessions: sessions || [], questions: questions || [], salesLog: salesLog || [] })
+      setD({ reports: reports || [], questions: questions || [], people: people || [], invites: invites || [] })
     })()
   }, [loc])
 
   if (!d) return <p className="muted">Loading…</p>
-  const checklistsDone = d.runs.filter(r => r.done).length
   const injuries = d.reports.filter(r => r.kind === 'injury' || r.kind === 'incident')
-  const onClock = d.time.filter(t => !t.clock_out)
-  const kpiOf = uid => d.kpis.find(k => k.user_id === uid)?.data || {}
-  const goalRows = d.people.map(p => {
-    const rs = [p.role, ...(p.roles || [])].filter(r => ['sales', 'frontdesk', 'coach', 'director'].includes(r))
-    const seen = {}; for (const g of d.goals.filter(g => rs.includes(g.role))) { if (!seen[g.metric] || Number(g.goal) > Number(seen[g.metric].goal)) seen[g.metric] = g }
-    const gs = Object.values(seen); const data = kpiOf(p.id)
-    return { p, rs, gs, data, hit: gs.filter(g => (Number(data[g.metric]) || 0) >= Number(g.goal)).length }
-  }).filter(r => r.gs.length)
-  const sessions7 = d.sessions.length, athletes7 = d.sessions.reduce((a, s) => a + (s.session_athletes?.[0]?.count || 0), 0)
+  // One roster: signed-up profiles + pre-registered teammates
+  const roster = [...d.people.map(p => ({ ...p, source: 'profile' })), ...d.invites.map(i => ({ ...i, source: 'invite' }))].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''))
 
   return (
     <>
@@ -64,6 +51,8 @@ export default function Dashboard() {
         )}
       </div>
       <p className="muted small">Open this once a day. Everything below updates on its own.</p>
+
+      <SheetsKpis sheets={sheets} />
 
       <h2>Sales · Square</h2>
       {!sq ? <p className="muted">Loading Square…</p> : !sq.connected ? (
@@ -158,57 +147,20 @@ export default function Dashboard() {
         <div className="card" style={ret.onTrack === false ? { borderColor: 'rgba(229,72,77,0.5)' } : {}}>
           <div className="grid">
             <Stat label="Churn" value={pct(ret.churn)} tone={ret.onTrack == null ? '' : ret.onTrack ? 'gold' : 'pink'} sub={`target under ${ret.target}%`} />
-            <Stat label="Cancellations" value={ret.cancelCount} sub={ret.lostMrr ? `-${money(ret.lostMrr)}/mo lost` : ''} />
-            <Stat label="Active members" value={ret.active || '—'} sub={ret.activeSource === 'PushPress' ? 'from PushPress' : 'set on Team → Hours & pay'} />
-            <Stat label="Churn bonus" value={ret.onTrack == null ? '—' : ret.onTrack ? 'On track' : 'Missed'} tone={ret.onTrack ? 'gold' : ''} sub={(comp?.bonus_people || []).join(' · ')} />
+            <Stat label="Cancellations" value={ret.cancelCount} sub="plans ended this month · PushPress" />
+            <Stat label="Active members" value={ret.active || '—'} sub="paying, not paused" />
+            <Stat label="Churn bonus" value={ret.onTrack == null ? '—' : ret.onTrack ? 'On track' : 'Missed'} tone={ret.onTrack ? 'gold' : ''} sub={`${(comp?.bonus_people || []).join(' · ')}${Number(comp?.churn_bonus) ? ' · ' + money(comp.churn_bonus) + ' each' : ' · amount not set'}`} />
           </div>
-          {ret.cancels.length > 0 && <ul className="list" style={{ marginTop: 8 }}>{ret.cancels.slice(0, 8).map(c => <li key={c.id}><span className="grow small"><div>{c.name} <span className="muted">· {c.program || ''}</span></div><div className="muted">{c.note} · {c.log_date}</div></span>{c.amount ? <span className="pill pink">-{money(c.amount)}/mo</span> : null}</li>)}</ul>}
         </div>
       )}
 
-      <ClinicBoard />
+      <ClinicsCard pp={pp} />
 
-      <h2>Goals today · by person</h2>
-      <div className="card">
-        {goalRows.length === 0 ? <p className="muted">No one with daily goals yet. Set roles on the Team page.</p> : (
-          <ul className="list">
-            {goalRows.map(({ p, rs, gs, data, hit }) => (
-              <li key={p.id} style={{ alignItems: 'flex-start' }}>
-                <span className={`pill ${hit === gs.length && gs.length ? 'good' : hit > 0 ? 'gold' : ''}`}>{hit}/{gs.length}</span>
-                <span className="grow"><div style={{ fontWeight: 600 }}>{p.full_name} <span className="muted small">· {rs.map(r => ROLES[r]).join(' + ')}</span></div>
-                  <div className="row wrap small" style={{ gap: 8, marginTop: 2 }}>{gs.map(g => { const v = Number(data[g.metric]) || 0, ok = v >= Number(g.goal); return <span key={g.id} style={{ color: ok ? 'var(--good)' : 'var(--muted)' }}>{ok ? '✓' : '○'} {g.label}: {g.kind === 'check' ? (ok ? 'done' : 'not yet') : `${v}/${g.goal}`}</span> })}</div>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <Link to="/team" className="small">Edit goals on the Team page →</Link>
-      </div>
-
-      <h2>Today on the floor</h2>
-      <div className="grid">
-        <Stat label="On the clock now" value={onClock.length} tone="gold" sub={onClock.map(t => t.profiles?.full_name?.split(' ')[0]).filter(Boolean).join(', ') || 'nobody'} />
-        <Stat label="Checklists complete" value={`${checklistsDone} / ${d.templates.length}`} tone={checklistsDone < d.templates.length ? '' : 'gold'} />
-        <Stat label="Injury reports · 7 days" value={injuries.length} tone={injuries.length ? 'pink' : ''} />
-        <Stat label="Sessions · 7 days" value={sessions7} sub={`${athletes7} athlete-sessions`} />
-        <Stat label="Hours · this week" value={hours(d.time.reduce((a, t) => a + ((t.clock_out ? new Date(t.clock_out) : new Date()) - new Date(t.clock_in)), 0))} />
-        <Stat label="In onboarding" value={d.hires.length} />
-      </div>
-
-      <h2>Sales team · 7 days</h2>
-      <div className="grid">
-        <Stat label="Calls" value={d.salesLog.filter(x => x.kind === 'call').reduce((a, x) => a + (Number(x.amount) || 1), 0)} />
-        <Stat label="Meetings booked" value={d.salesLog.filter(x => x.kind === 'meeting').length} />
-        <Stat label="Evals showed" value={d.salesLog.filter(x => x.kind === 'eval').length} />
-        <Stat label="Closes" value={d.salesLog.filter(x => x.kind === 'close').length} tone="gold" />
-        <Stat label="Signed" value={money(d.salesLog.filter(x => x.kind === 'close').reduce((a, x) => a + (Number(x.amount) || 0), 0))} tone="gold" />
-      </div>
-      {d.salesLog.some(x => x.kind === 'close') && (
-        <div className="card"><h3>Closes</h3><ul className="list">{d.salesLog.filter(x => x.kind === 'close').slice(0, 10).map(x => <li key={x.id}><span className="grow"><div>{x.name} <span className="muted small">· {x.program || ''}</span></div><div className="small muted">{x.profiles?.full_name} · {x.log_date}</div></span><b>{money(x.amount)}</b></li>)}</ul></div>
-      )}
+      <h2>Pay & commission · {new Date().toLocaleDateString(undefined, { month: 'long' })}</h2>
+      <PayCard pp={pp} sheets={sheets} ret={ret} comp={comp} roster={roster} onCompSaved={async () => { const c = await loadComp(); setComp(c); setRet(await loadRetention(c, { allLocations: true })) }} onRosterSaved={() => setD(null)} />
 
       <div className="card" style={injuries.length ? { borderColor: 'rgba(229,72,77,0.5)' } : {}}>
-        <h2 style={{ marginTop: 0 }}>Injury reports · 7 days</h2>
+        <h2 style={{ marginTop: 0 }}>Injury reports · 30 days</h2>
         {injuries.length === 0 ? <p className="muted small" style={{ margin: 0 }}>None filed.</p> : (
           <ul className="list">{injuries.map(r => <li key={r.id} style={{ alignItems: 'flex-start' }}><span className={`pill ${/Serious/.test(r.data?.severity || '') ? 'bad' : /Moderate/.test(r.data?.severity || '') ? 'gold' : ''}`}>{(r.data?.severity || 'Injury').split(' ')[0]}</span><span className="grow"><div style={{ fontWeight: 500 }}>{r.data?.athlete} <span className="muted small">· {r.data?.injury}</span></div><div className="small muted">{r.data?.what}</div><div className="small muted">{r.profiles?.full_name} · {r.data?.when ? new Date(r.data.when).toLocaleString() : r.report_date}{r.data?.followup && <span className="flag"> · follow-up: {r.data.followup}</span>}</div></span></li>)}</ul>
         )}
