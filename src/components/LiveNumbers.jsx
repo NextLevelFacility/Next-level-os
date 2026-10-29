@@ -15,7 +15,7 @@ export default function LiveNumbers({ title = 'Live numbers', showSales = true }
   const tiles = []
   if (showSales && ok(sq)) tiles.push(['Sales · month', money(sq.month.sales), `${money(sq.today.sales)} today`])
   if (ok(pp)) tiles.push(['Active members', pp.active ?? '—', `${pp.cancellations_month ?? 0} cancelled this month`])
-  if (ok(ghl)) tiles.push(['New leads today', ghl.leads.today, `${ghl.leads.week} this week`], ['Evals today', ghl.appointments.today, `${ghl.appointments.upcoming7} booked · 7 days`])
+  if (ok(ghl)) tiles.push(['New leads today', ghl.leads.today, `${ghl.leads.week} this week`], ['Evals today', ghl.appointments.today, `${ghl.appointments.upcoming7} booked · 7 days`], ['Show rate · month', ghl.appointments.month?.showRate != null ? ghl.appointments.month.showRate + '%' : '—', `${ghl.appointments.month?.showed ?? 0} showed · ${ghl.appointments.month?.noshow ?? 0} no-show`])
   if (!tiles.length) return null
   return (
     <div className="card">

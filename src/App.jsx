@@ -24,6 +24,7 @@ import Clinics from './screens/Clinics.jsx'
 import Sales from './screens/Sales.jsx'
 import SopStudio from './screens/SopStudio.jsx'
 import SopPage from './screens/SopPage.jsx'
+import Appointments from './screens/Appointments.jsx'
 
 const Icon = ({ d }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
 export const icons = {
@@ -69,16 +70,17 @@ export default function App() {
     ask: ['/ask', 'Ask', icons.ask],
     clinics: ['/clinics', 'Clinics', icons.clinics],
     sops: ['/sops', 'SOP Studio', icons.playbook],
+    appointments: ['/appointments', 'Appointments', icons.clinics],
     settings: ['/settings', 'You', icons.settings],
   }
   const wants = ['today']
   if (manager) wants.push('ceo', 'athletes')
   if (coach) wants.push('athletes', 'method')
-  if (roles.includes('sales')) wants.push('sales', 'playbook', 'clinics')
+  if (roles.includes('sales')) wants.push('sales', 'appointments', 'playbook', 'clinics')
   if (roles.includes('frontdesk')) wants.push('checklists', 'playbook', 'clinics')
   if (role === 'newhire') wants.push('hires', 'playbook')
-  wants.push('ask', 'method', 'clinics', 'playbook', 'sops', 'checklists', 'reports', 'sales', 'hires', 'team', 'settings')
-  const ordered = [...new Set(wants)].filter(k => k !== 'hires' || manager || role === 'newhire').filter(k => k !== 'ceo' || manager).filter(k => k !== 'sales' || roles.includes('sales') || manager).filter(k => k !== 'sops' || isDirector(roles))
+  wants.push('ask', 'method', 'clinics', 'appointments', 'playbook', 'sops', 'checklists', 'reports', 'sales', 'hires', 'team', 'settings')
+  const ordered = [...new Set(wants)].filter(k => k !== 'hires' || manager || role === 'newhire').filter(k => k !== 'ceo' || manager).filter(k => k !== 'sales' || roles.includes('sales') || manager).filter(k => k !== 'sops' || isDirector(roles)).filter(k => k !== 'appointments' || roles.includes('sales') || manager)
   const primary = ordered.slice(0, 4), extra = ordered.slice(4)
   const isExtraActive = extra.some(k => loc.pathname.startsWith(all[k][0]) && all[k][0] !== '/')
 
@@ -132,6 +134,7 @@ export default function App() {
           <Route path="/sales" element={<Sales />} />
           <Route path="/sops" element={isDirector(roles) ? <SopStudio /> : <Navigate to="/playbook" />} />
           <Route path="/sop/:key" element={<SopPage />} />
+          <Route path="/appointments" element={<Appointments />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

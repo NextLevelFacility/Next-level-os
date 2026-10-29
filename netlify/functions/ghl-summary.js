@@ -60,14 +60,18 @@ async function oppList(params, pages = 3) {
 }
 
 async function appointments(startMs, endMs) {
-  // Calendar events need a calendar (or user/group) id, so list calendars and ask each one.
+  // Calendar events need a calendar id, so list calendars and ask each one (in parallel).
   let cals = []
-  try { cals = (await ghl(`/calendars/?locationId=${encodeURIComponent(LOC())}`)).calendars || [] } catch { return { events: [], calendars: 0, error: 'calendars' } }
+  try { cals = (await ghl(`/calendars/?locationId=${encodeURIComponent(LOC())}`)).calendars || [] } catch { return { events: [], calendars: [], error: 'calendars' } }
   const events = []
-  await Promise.all(cals.slice(0, 15).map(async (c) => {
+  await Promise.all(cals.slice(0, 20).map(async (c) => {
     try { const d = await ghl(`/calendars/events?locationId=${encodeURIComponent(LOC())}&calendarId=${encodeURIComponent(c.id)}&startTime=${startMs}&endTime=${endMs}`); for (const e of d.events || []) events.push({ ...e, calendarName: c.name }) } catch {}
   }))
-  return { events, calendars: cals.length }
+  return { events, calendars: cals.map(c => ({ id: c.id, name: c.name })) }
+}
+// Staff names for "assigned to" (needs the users scope; silently empty without it).
+async function userNames() {
+  try { const d = await ghl(`/users/?locationId=${encodeURIComponent(LOC())}`); return Object.fromEntries((d.users || []).map(u => [u.id, u.name || [u.firstName, u.lastName].filter(Boolean).join(' ')])) } catch { return {} }
 }
 
 async function summary() {
@@ -104,21 +108,32 @@ async function summary() {
     wonMonth = wonM.length; wonValue = wonM.reduce((a, o) => a + (Number(o.monetaryValue) || 0), 0)
   } catch (e) { oppErr = String(e.message) }
 
-  // Appointments: this week past (showed / no-show) and next 7 days booked
-  const ap = await appointments(start7.getTime(), weekAhead.getTime())
-  const st = (e) => String(e.appointmentStatus || e.status || '').toLowerCase()
-  const upcoming = ap.events.filter(e => new Date(e.startTime) >= now && new Date(e.startTime) < weekAhead)
-  const past = ap.events.filter(e => new Date(e.startTime) < now)
-  const todayAppts = ap.events.filter(e => { const s = new Date(e.startTime); return s >= startToday && s < new Date(startToday.getTime() + 864e5) })
+  // Appointments: every calendar, 30 days back and 45 days ahead, with status (confirmed / showed / no-show / cancelled)
+  const back30 = new Date(startToday.getTime() - 30 * 864e5), ahead45 = new Date(startToday.getTime() + 45 * 864e5)
+  const [ap, users] = await Promise.all([appointments(back30.getTime(), ahead45.getTime()), userNames()])
+  const st = (e) => { const v = String(e.appointmentStatus || e.status || '').toLowerCase().replace(/[^a-z]/g, ''); return v === 'noshow' ? 'no-show' : v || 'booked' }
+  const list = ap.events.map(e => ({ id: e.id, title: e.title || 'Appointment', at: e.startTime, end: e.endTime, status: st(e), calendar: e.calendarName, contactId: e.contactId || null, with: users[e.assignedUserId] || null, notes: e.notes ? String(e.notes).slice(0, 200) : null, address: e.address || null }))
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)))
+  const inRange = (from, to) => list.filter(e => { const d = new Date(e.at); return d >= from && d < to })
+  const count = (arr, s) => arr.filter(e => e.status === s).length
+  const stats = (arr) => ({ booked: arr.length, showed: count(arr, 'showed'), noshow: count(arr, 'no-show'), cancelled: count(arr, 'cancelled'), confirmed: count(arr, 'confirmed') + count(arr, 'booked') + count(arr, 'new') })
+  const past7 = inRange(start7, now), next7 = inRange(now, weekAhead), monthSoFar = inRange(startMonth, now), todayAppts = inRange(startToday, new Date(startToday.getTime() + 864e5))
+  const mtd = stats(monthSoFar); const decided = mtd.showed + mtd.noshow
+  const byCalendar = {}
+  for (const e of inRange(startMonth, ahead45)) { byCalendar[e.calendar] = byCalendar[e.calendar] || { booked: 0, showed: 0, noshow: 0 }; byCalendar[e.calendar].booked++; if (e.status === 'showed') byCalendar[e.calendar].showed++; if (e.status === 'no-show') byCalendar[e.calendar].noshow++ }
 
   return {
     connected: true, location: locationName,
     leads: { today: today.total, week: week.total, month: month.total, sources: Object.entries(sources).sort((a, b) => b[1] - a[1]).slice(0, 8), newest },
     pipeline: { open, byPipeline, byStage, wonMonth, wonValue, error: oppErr },
     appointments: {
-      calendars: ap.calendars, today: todayAppts.length, upcoming7: upcoming.length,
-      showed7: past.filter(e => st(e) === 'showed').length, noshow7: past.filter(e => st(e) === 'noshow' || st(e) === 'no-show').length, cancelled7: past.filter(e => st(e) === 'cancelled').length,
-      todayList: todayAppts.slice(0, 12).map(e => ({ title: e.title, at: e.startTime, status: st(e), calendar: e.calendarName })).sort((a, b) => a.at.localeCompare(b.at)),
+      calendars: ap.calendars, today: todayAppts.length, upcoming7: next7.length,
+      past7: stats(past7), next7: stats(next7), month: { ...mtd, showRate: decided ? Math.round(mtd.showed / decided * 100) : null },
+      showed7: count(past7, 'showed'), noshow7: count(past7, 'no-show'), cancelled7: count(past7, 'cancelled'),
+      byCalendar: Object.entries(byCalendar).sort((a, b) => b[1].booked - a[1].booked),
+      todayList: todayAppts.slice(0, 20),
+      list: list.slice(-400),            // everything from 30 days back to 45 days ahead
+      window: { from: back30.toISOString(), to: ahead45.toISOString() },
     },
     asOf: now.toISOString(),
   }
