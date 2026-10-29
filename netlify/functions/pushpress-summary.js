@@ -117,6 +117,18 @@ export const handler = async (event) => {
 async function debug() {
   await probe()
   const out = {}
+  // Events (clinics) and whoever is registered on them
+  try {
+    const r = await fetch(`${BASE}/events?limit=50&page=1`, { headers: headers() }); const d = await r.json(); const evs = pickList(d)
+    out.events = { count: evs.length, keys: Object.keys(evs[0] || {}), sample: evs.slice(0, 6).map(e => Object.fromEntries(Object.entries(e).map(([k, v]) => [k, typeof v === 'object' && v ? JSON.stringify(v).slice(0, 160) : v]))) }
+    const ev = evs.find(e => /clinic|camp|thanksgiving/i.test(JSON.stringify(e))) || evs[0]
+    if (ev) {
+      for (const path of [`/events/${ev.id}`, `/events/${ev.id}/registrations`, `/events/${ev.id}/attendees`, `/events/${ev.id}/customers`, `/events/${ev.id}/checkins`, `/registrations?eventId=${ev.id}`, `/event-registrations?eventId=${ev.id}`, `/checkins?eventId=${ev.id}`, `/checkins?limit=5`, `/classes/${ev.id}/attendees`]) {
+        try { const r2 = await fetch(`${BASE}${path}${path.includes('?') ? '&' : '?'}limit=5`, { headers: headers() }); const d2 = await r2.json().catch(() => null); out['probe ' + path] = `${r2.status} · ${describe(d2)}` } catch (e) { out['probe ' + path] = String(e.message) }
+      }
+    }
+  } catch (e) { out.eventsError = String(e.message) }
+  try { const r = await fetch(`${BASE}/classes?limit=3&page=1`, { headers: headers() }); const d = await r.json(); const cl = pickList(d); out.classes = { keys: Object.keys(cl[0] || {}), sample: cl.slice(0, 2).map(e => Object.fromEntries(Object.entries(e).map(([k, v]) => [k, typeof v === 'object' && v ? JSON.stringify(v).slice(0, 160) : v]))) } } catch {}
   for (const path of ['/payments', '/invoices', '/transactions', '/charges', '/orders', '/subscriptions', '/memberships', '/billing', '/revenue', '/reports/revenue', '/checkins', '/appointments', '/classes', '/events']) {
     try {
       const r = await fetch(`${BASE}${path}?limit=5&page=1`, { headers: headers() })
