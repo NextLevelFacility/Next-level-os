@@ -4,13 +4,30 @@ import { requireUser, json } from './_auth.js'
 
 const BASE = (process.env.PUSHPRESS_API_BASE || 'https://api.pushpress.com/v3').replace(/\/$/, '')
 const PAGE = 100
+const KEY = () => (process.env.PUSHPRESS_API_KEY || '').trim()
+const CID = () => (process.env.PUSHPRESS_COMPANY_ID || '').trim()
 
-function headers() {
-  const key = process.env.PUSHPRESS_API_KEY
-  const h = { Accept: 'application/json', 'API-KEY': key, 'x-api-key': key, Authorization: `Bearer ${key}` }
-  const cid = process.env.PUSHPRESS_COMPANY_ID
-  if (cid) { h.companyId = cid; h['company-id'] = cid }
+// PushPress accepts the key in the API-KEY header (per their SDK). We probe the alternatives once in case that changes.
+const AUTH_STYLES = [
+  ['API-KEY', (k) => ({ 'API-KEY': k })],
+  ['x-api-key', (k) => ({ 'x-api-key': k })],
+  ['Bearer', (k) => ({ Authorization: `Bearer ${k}` })],
+]
+let authStyle = null
+function headers(style = authStyle || AUTH_STYLES[0]) {
+  const h = { Accept: 'application/json', ...style[1](KEY()) }
+  if (CID()) { h.companyId = CID(); h['company-id'] = CID() }
   return h
+}
+// Find the header style the API accepts, using the cheap /company endpoint. Returns { ok, tried } for diagnostics.
+async function probe() {
+  const tried = []
+  for (const style of AUTH_STYLES) {
+    const r = await fetch(`${BASE}/company`, { headers: headers(style) }).catch(() => null)
+    tried.push(`${style[0]}→${r ? r.status : 'network error'}`)
+    if (r && r.ok) { authStyle = style; const company = await r.json().catch(() => null); return { ok: true, tried, company } }
+  }
+  return { ok: false, tried }
 }
 
 // Pull every page of a list endpoint. Returns { list, status } — status is the first HTTP status so callers can tell 404 (no such endpoint) from 401.
@@ -42,8 +59,9 @@ const STATUS_FIELDS = ['status', 'membershipStatus', 'memberStatus', 'customerSt
 const DATE_FIELDS = ['cancelledAt', 'canceledAt', 'cancellationDate', 'cancelDate', 'cancelled_at', 'canceled_at', 'endDate', 'endedAt', 'end_date', 'terminatedAt', 'updatedAt', 'updated_at']
 const norm = (v) => String(v ?? '').trim().toLowerCase()
 const statusOf = (o) => { for (const f of STATUS_FIELDS) { if (o && o[f] != null && typeof o[f] !== 'object') return norm(o[f]) } return '' }
-const isActive = (s) => /^(active|member|current|paid|trialing|trial|frozen|hold|on[_ -]?hold)/.test(s) && !/inactive/.test(s)
-const isCancelled = (s) => /cancel|former|inactive|terminated|expired|ended|churn/.test(s)
+// PushPress plan/enrollment statuses: active, alert, pending_active, pending_cancel, paused, cancelled, completed (+ customer: member/lead/former)
+const isActive = (s) => /^(active|alert|pending|paused|member|current|paid|trialing|trial|frozen|hold|on[_ -]?hold)/.test(s) && !/inactive/.test(s)
+const isCancelled = (s) => /cancel|former|inactive|terminated|expired|ended|completed|churn/.test(s) && !/^pending/.test(s)
 const isLead = (s) => /lead|prospect/.test(s)
 const dateOf = (o) => { for (const f of DATE_FIELDS) { if (o && o[f]) { const d = new Date(o[f]); if (!isNaN(d)) return d } } return null }
 const nameOf = (c) => (c.name || [c.firstName || c.first_name, c.lastName || c.last_name].filter(Boolean).join(' ') || c.email || c.id || '').trim()
@@ -57,9 +75,15 @@ const since = () => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0)
 export const handler = async (event) => {
   const ctx = await requireUser(event)
   if (!ctx) return json(401, { error: 'Sign in required' })
-  if (!process.env.PUSHPRESS_API_KEY) return json(200, { connected: false, hint: 'Add PUSHPRESS_API_KEY in Netlify → Environment variables.' })
+  if (!KEY()) return json(200, { connected: false, hint: 'Add PUSHPRESS_API_KEY in Netlify → Environment variables.' })
 
   try {
+    // 0) Can this key talk to PushPress at all?
+    const pr = await probe()
+    if (!pr.ok) {
+      return json(200, { connected: true, error: `PushPress rejected the API key (${pr.tried.join(', ')}). In PushPress go to Settings → Security & Access → API keys, create a key, and paste the whole key into Netlify as PUSHPRESS_API_KEY (no spaces). If your key covers more than one gym, also add PUSHPRESS_COMPANY_ID.` })
+    }
+
     // 1) Customers: members, former members and leads
     const { list: customers } = await listAll('/customers')
     const statusValues = {}
@@ -99,8 +123,9 @@ export const handler = async (event) => {
       cancellations_month: active == null ? null : cancelled.length,
       cancelled: cancelled.sort((a, b) => (b.at || '').localeCompare(a.at || '')).slice(0, 50),
       asOf: new Date().toISOString(),
+      company: pr.company?.name || pr.company?.data?.name || null,
       shape: {   // diagnostics only — key names and counts, never member data
-        customers: customers.length, customerKeys: Object.keys(customers[0] || {}).slice(0, 40), statusField, statusValues,
+        auth: authStyle?.[0], customers: customers.length, customerKeys: Object.keys(customers[0] || {}).slice(0, 40), statusField, statusValues,
         enrollments: enrollments ? enrollments.length : null, enrollmentKeys: Object.keys((enrollments || [])[0] || {}).slice(0, 40), enrollErr,
       },
     })

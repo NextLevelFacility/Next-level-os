@@ -3,7 +3,18 @@
 import { requireUser, json } from './_auth.js'
 
 const SQ = 'https://connect.squareup.com/v2'
-const headers = () => ({ Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`, 'Content-Type': 'application/json', 'Square-Version': '2025-01-23' })
+const TOKEN = () => (process.env.SQUARE_ACCESS_TOKEN || '').trim()
+const headers = () => ({ Authorization: `Bearer ${TOKEN()}`, 'Content-Type': 'application/json', 'Square-Version': '2025-01-23' })
+
+// When Square says "could not be authorized", work out why without exposing the token.
+async function diagnoseAuth() {
+  const ping = async (host) => { try { const r = await fetch(`${host}/v2/locations`, { headers: headers() }); const d = await r.json(); return { ok: r.ok && !d.errors, status: r.status, detail: d.errors?.[0]?.detail || '' } } catch (e) { return { ok: false, status: 0, detail: String(e.message) } } }
+  const prod = await ping('https://connect.squareup.com')
+  if (prod.ok) return 'The token works but cannot read payments. In Square Developer → your app → Permissions (or OAuth), make sure PAYMENTS_READ, ORDERS_READ and SUBSCRIPTIONS_READ are allowed.'
+  const sandbox = await ping('https://connect.squareupsandbox.com')
+  if (sandbox.ok) return 'This is a SANDBOX token, so it only sees test data. In Square Developer → your app → Credentials, switch the toggle at the top from Sandbox to Production, copy the Production Access Token, and replace SQUARE_ACCESS_TOKEN in Netlify.'
+  return `Square rejected the token (${prod.status}${prod.detail ? ': ' + prod.detail : ''}). Re-copy the Production Access Token from Square Developer → your app → Credentials and paste the whole thing into Netlify as SQUARE_ACCESS_TOKEN, no spaces.`
+}
 
 async function listPayments(begin, end) {
   let cursor, out = []
@@ -63,7 +74,7 @@ function tzMidnight(y, m, d, ref = new Date()) {
 export const handler = async (event) => {
   const ctx = await requireUser(event)
   if (!ctx) return json(401, { error: 'Sign in required' })
-  if (!process.env.SQUARE_ACCESS_TOKEN) return json(200, { connected: false, hint: 'Add SQUARE_ACCESS_TOKEN in Netlify → Environment variables.' })
+  if (!TOKEN()) return json(200, { connected: false, hint: 'Add SQUARE_ACCESS_TOKEN in Netlify → Environment variables.' })
   try {
     const now = new Date()
     const t = tzParts(now)
@@ -113,6 +124,8 @@ export const handler = async (event) => {
       asOf: now.toISOString(),
     })
   } catch (e) {
-    return json(200, { connected: true, error: String(e.message || e) })
+    const msg = String(e.message || e)
+    const error = /authoriz|UNAUTHORIZED|ACCESS_TOKEN/i.test(msg) ? await diagnoseAuth() : msg
+    return json(200, { connected: true, error })
   }
 }
