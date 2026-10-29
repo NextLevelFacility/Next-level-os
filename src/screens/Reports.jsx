@@ -2,75 +2,63 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../lib/auth.jsx'
 import { supabase, isManager, today } from '../lib/supabase'
 
+// The only report staff file: an injury report. Everything else (sales, sessions, shifts) is logged where it happens.
 export const REPORT_TYPES = {
-  shift: { label: 'Shift report', roles: ['frontdesk', 'operator', 'owner'], fields: [
-    ['walkins', 'Walk-ins today', 'number'], ['rentals', 'Field rentals / parties hosted', 'number'], ['concession_sales', 'Concession sales ($)', 'number'],
-    ['issues', 'Anything broken, missing or unsafe?', 'text'], ['wins', 'One thing that went great', 'text'] ] },
-  session: { label: 'Session report', roles: ['coach', 'operator', 'owner'], fields: [
-    ['sessions', 'Sessions coached', 'number'], ['athletes', 'Athletes trained', 'number'], ['evals', 'Evaluations run', 'number'],
-    ['standouts', 'Athletes who stood out (and why)', 'text'], ['concerns', 'Athletes to watch (effort, attitude, injury)', 'text'] ] },
-  sales: { label: 'Daily sales report', roles: ['sales', 'operator', 'owner'], fields: [
-    ['calls', 'Calls made (goal 100)', 'number'], ['meetings_booked', 'Meetings booked (goal 3–5)', 'number'], ['evals_showed', 'Evals showed', 'number'],
-    ['closed', 'Closes (goal 2)', 'number'], ['revenue', 'New revenue signed ($)', 'number'], ['objections', 'Objections heard today', 'text'], ['tomorrow', 'Top 3 follow-ups for tomorrow', 'text'] ] },
-  incident: { label: 'Incident report', roles: ['*'], fields: [
-    ['what', 'What happened', 'text'], ['who', 'Who was involved', 'text'], ['action', 'What was done', 'text'], ['followup', 'Needs follow-up from the Operator?', 'text'] ] },
+  injury: { label: 'Injury report', roles: ['*'] },
 }
+export const SEVERITY = ['Minor — treated on site, kept training', 'Moderate — stopped training, parent collected', 'Serious — medical attention / 911']
+const FIELDS = [
+  ['athlete', 'Athlete / person injured', 'text'],
+  ['when', 'Date and time', 'datetime'],
+  ['where', 'Where in the facility', 'short'],
+  ['activity', 'What they were doing (session, rental, party, open play)', 'short'],
+  ['what', 'What happened', 'text'],
+  ['injury', 'Injury (body part, what you saw)', 'short'],
+  ['severity', 'Severity', 'select'],
+  ['action', 'First aid / action taken', 'text'],
+  ['notified', 'Parent or guardian notified? (who, when, how)', 'short'],
+  ['witnesses', 'Witnesses / staff present', 'short'],
+  ['followup', 'Follow-up needed (call, incident form, equipment fix)', 'short'],
+]
 
 export default function Reports() {
-  const { user, role, roles, locationId } = useAuth()
-  const [kind, setKind] = useState(null)
+  const { user, roles, locationId, profile } = useAuth()
+  const [open, setOpen] = useState(false)
   const [data, setData] = useState({})
   const [mine, setMine] = useState([])
   const [msg, setMsg] = useState('')
 
-  const available = Object.entries(REPORT_TYPES).filter(([, t]) => t.roles.includes('*') || t.roles.some(r => roles.includes(r)) || isManager(roles))
   async function load() {
-    const { data } = await supabase.from('reports').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10)
+    const q = supabase.from('reports').select('*, profiles(full_name)').eq('kind', 'injury').order('created_at', { ascending: false }).limit(20)
+    const { data } = isManager(roles) ? await q : await q.eq('user_id', user.id)
     setMine(data || [])
   }
   useEffect(() => { load() }, [])
 
   async function submit(e) {
     e.preventDefault()
-    const { error } = await supabase.from('reports').insert({ location_id: locationId, user_id: user.id, kind, data })
+    const { error } = await supabase.from('reports').insert({ location_id: locationId, user_id: user.id, kind: 'injury', data: { ...data, filed_by: profile.full_name } })
     if (error) return setMsg(error.message)
-    // A sales report also updates the day's goals, so the checkmarks match the report.
-    if (kind === 'sales') {
-      const { data: k } = await supabase.from('kpi_days').select('data').eq('user_id', user.id).eq('kpi_date', today()).maybeSingle()
-      const d = { ...(k?.data || {}) }
-      if (data.calls !== '' && data.calls != null) d.calls = Number(data.calls)
-      if (data.meetings_booked !== '' && data.meetings_booked != null) d.meetings = Number(data.meetings_booked)
-      if (data.closed !== '' && data.closed != null) d.closes = Number(data.closed)
-      await supabase.from('kpi_days').upsert({ user_id: user.id, location_id: locationId, kpi_date: today(), data: d }, { onConflict: 'user_id,kpi_date' })
-    }
-    setMsg('Filed. It\'s on the dashboard now.'); setKind(null); setData({}); load()
-  }
-  async function openKind(k) {
-    setKind(k); setMsg('')
-    if (k === 'sales') {
-      const { data: kd } = await supabase.from('kpi_days').select('data').eq('user_id', user.id).eq('kpi_date', today()).maybeSingle()
-      const g = kd?.data || {}
-      setData({ calls: g.calls ?? '', meetings_booked: g.meetings ?? '', closed: g.closes ?? '' })
-    } else setData({})
+    setMsg('Filed. The Owner and Operator can see it now.'); setOpen(false); setData({}); load()
   }
 
   return (
     <>
-      <h1>Reports</h1>
-      <p className="muted">Two minutes, from your phone. It lands on the CEO dashboard the moment you hit file.</p>
+      <h1>Injury report</h1>
+      <p className="muted">File one for any injury, however small, before the end of your shift. Facts only — what you saw and what you did.</p>
       {msg && <div className="card accent">{msg}</div>}
-      {!kind ? (
-        <div className="grid">
-          {available.map(([k, t]) => <button key={k} className="stat" style={{ textAlign: 'left', cursor: 'pointer', color: 'inherit' }} onClick={() => openKind(k)}><div className="label">File</div><div className="display" style={{ fontSize: '1.4rem' }}>{t.label}</div></button>)}
-        </div>
+      {!open ? (
+        <button className="btn" onClick={() => { setOpen(true); setMsg(''); setData({ when: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) }) }}>File an injury report</button>
       ) : (
         <form className="card" onSubmit={submit}>
-          <div className="row between"><h2>{REPORT_TYPES[kind].label}</h2><button type="button" className="btn ghost small" onClick={() => setKind(null)}>Cancel</button></div>
-          {REPORT_TYPES[kind].fields.map(([key, label, type]) => (
+          <div className="row between"><h2 style={{ margin: 0 }}>New injury report</h2><button type="button" className="btn ghost small" onClick={() => setOpen(false)}>Cancel</button></div>
+          <div style={{ height: 10 }} />
+          {FIELDS.map(([key, label, type]) => (
             <label className="field" key={key}><span>{label}</span>
-              {type === 'text'
-                ? <textarea className="input" value={data[key] || ''} onChange={e => setData({ ...data, [key]: e.target.value })} />
-                : <input className="input" type="number" inputMode="decimal" value={data[key] ?? ''} onChange={e => setData({ ...data, [key]: e.target.value === '' ? '' : Number(e.target.value) })} />}
+              {type === 'text' ? <textarea className="input" value={data[key] || ''} onChange={e => setData({ ...data, [key]: e.target.value })} required={key === 'what'} />
+                : type === 'select' ? <select className="input" value={data[key] || ''} onChange={e => setData({ ...data, [key]: e.target.value })} required><option value="">Choose…</option>{SEVERITY.map(s => <option key={s}>{s}</option>)}</select>
+                : type === 'datetime' ? <input className="input" type="datetime-local" value={data[key] || ''} onChange={e => setData({ ...data, [key]: e.target.value })} required />
+                : <input className="input" value={data[key] || ''} onChange={e => setData({ ...data, [key]: e.target.value })} required={key === 'athlete'} />}
             </label>
           ))}
           <button className="btn block">File report</button>
@@ -78,8 +66,19 @@ export default function Reports() {
       )}
       {mine.length > 0 && (
         <div className="card">
-          <h2>Your recent reports</h2>
-          <ul className="list">{mine.map(r => <li key={r.id}><span className="pill gold">{REPORT_TYPES[r.kind]?.label || r.kind}</span><span className="grow small muted">{new Date(r.created_at).toLocaleString()}</span></li>)}</ul>
+          <h2>{isManager(roles) ? 'Injury reports' : 'Your reports'}</h2>
+          <ul className="list">
+            {mine.map(r => (
+              <li key={r.id} style={{ alignItems: 'flex-start' }}>
+                <span className={`pill ${/Serious/.test(r.data?.severity || '') ? 'bad' : /Moderate/.test(r.data?.severity || '') ? 'gold' : ''}`}>{(r.data?.severity || 'Injury').split(' ')[0]}</span>
+                <span className="grow">
+                  <div style={{ fontWeight: 500 }}>{r.data?.athlete || 'Unnamed'} <span className="muted small">· {r.data?.injury || ''}</span></div>
+                  <div className="small muted">{r.data?.what}</div>
+                  <div className="small muted">{r.profiles?.full_name || r.data?.filed_by} · {r.data?.when ? new Date(r.data.when).toLocaleString() : new Date(r.created_at).toLocaleString()}{r.data?.followup ? ` · follow-up: ${r.data.followup}` : ''}</div>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </>

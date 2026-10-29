@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { noteBySlug, render, backlinksOf } from '../lib/vault'
+import { noteBySlug, render, backlinksOf, canSee } from '../lib/vault'
 import { supabase, isManager, isDirector, ROLES } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
 import { useSops, STATUS } from '../lib/sops'
@@ -22,14 +22,14 @@ export default function Note() {
   }, [slug, user.id, role])
 
   const html = useMemo(() => note ? render(note) : '', [note])
-  if (!note) return <div className="empty">That page isn't in the playbook. <Link to="/playbook">Back to the Playbook</Link></div>
+  if (!note || !canSee(note, role)) return <div className="empty">That page isn't in your playbook. <Link to="/playbook">Back to the Playbook</Link></div>
 
   async function markRead() {
     await supabase.from('sop_reads').upsert({ user_id: user.id, sop_path: note.path }, { onConflict: 'user_id,sop_path' })
     setReadAt(new Date().toISOString())
   }
 
-  const back = backlinksOf(note)
+  const back = backlinksOf(note).filter(b => canSee(b, role))
   return (
     <>
       <Link to="/playbook" className="small">← Playbook</Link>

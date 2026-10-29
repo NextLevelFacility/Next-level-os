@@ -70,20 +70,20 @@ export default function Sales() {
       <h1>Sales</h1>
       <p className="muted">{profile.full_name?.split(' ')[0]}, this is your board. Log every call, meeting and close here. The goals update as you go.</p>
 
-      <Goals roles={['sales']} refresh={goalsKey} />
+      <Goals roles={['sales']} refresh={goalsKey} title="Today's targets" />
 
       <div className="card">
-        <h2>Log it</h2>
+        <h2>Log activity</h2>
         <div className="row wrap" style={{ gap: 8 }}>
-          <button className="btn" onClick={() => logCalls(1)}>+1 call</button>
-          <button className="btn" onClick={() => logCalls(10)}>+10 calls</button>
-          <button className="btn gold" onClick={() => setForm({ kind: 'meeting', name: '', program: '', when_at: '', note: '' })}>Meeting booked</button>
-          <button className="btn good" onClick={() => setForm({ kind: 'close', name: '', program: PROGRAMS[0], amount: '', note: '' })}>Close</button>
+          <button className="btn ghost" onClick={() => logCalls(1)}>+1 call</button>
+          <button className="btn ghost" onClick={() => logCalls(10)}>+10 calls</button>
+          <button className="btn" onClick={() => setForm({ kind: 'meeting', name: '', program: '', when_at: '', note: '' })}>Meeting booked</button>
+          <button className="btn" onClick={() => setForm({ kind: 'close', name: '', program: PROGRAMS[0], amount: '', note: '' })}>Close</button>
           <button className="btn ghost" onClick={() => setForm({ kind: 'eval', name: '', program: '', when_at: '', note: '' })}>Eval showed</button>
           <button className="btn danger" onClick={() => setForm({ kind: 'cancel', name: '', program: PROGRAMS[0], amount: '', note: '' })}>Cancellation</button>
         </div>
         {form && (
-          <form onSubmit={submit} className="card accent" style={{ marginTop: 12 }}>
+          <form onSubmit={submit} className="card accent" style={{ marginTop: 12, marginBottom: 0 }}>
             <h3>{form.kind === 'meeting' ? 'Meeting booked' : form.kind === 'close' ? 'New close' : form.kind === 'cancel' ? 'Cancellation' : 'Eval showed'}</h3>
             <label className="field"><span>{form.kind === 'close' || form.kind === 'cancel' ? 'Athlete / family' : 'Lead name'}</span><input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required autoFocus /></label>
             {form.kind !== 'eval' && <label className="field"><span>Program</span><select className="input" value={form.program || ''} onChange={e => setForm({ ...form, program: e.target.value })}><option value="">—</option>{PROGRAMS.map(p => <option key={p}>{p}</option>)}<option>Thanksgiving Clinic</option><option>Winter Clinic</option><option>Spring Clinic</option><option>Summer Camp</option></select></label>}
@@ -97,17 +97,17 @@ export default function Sales() {
       </div>
 
       {comp && (
-        <div className="card accent">
+        <div className="card">
           <div className="row between wrap">
-            <div><h2 style={{ margin: 0 }}>Your money · {new Date().toLocaleDateString(undefined, { month: 'long' })}</h2><div className="small muted">{profile.pay_commission_pct ?? comp.commission_pct}% commission on everything you sign</div></div>
-            <div style={{ textAlign: 'right' }}><div className="small muted">Commission so far</div><div className="display" style={{ fontSize: '2.2rem', color: 'var(--gold)' }}>{money(commissionFor(monthRev, profile, comp))}</div><div className="small muted">on {money(monthRev)} signed · {monthCloses} closes</div></div>
+            <div><h2 style={{ margin: 0 }}>Earnings · {new Date().toLocaleDateString(undefined, { month: 'long' })}</h2><div className="small muted">{profile.pay_commission_pct ?? comp.commission_pct}% commission on everything you sign</div></div>
+            <div style={{ textAlign: 'right' }}><div className="small muted">Commission so far</div><div className="display" style={{ fontSize: '1.6rem', color: 'var(--gold)' }}>{money(commissionFor(monthRev, profile, comp))}</div><div className="small muted">on {money(monthRev)} signed · {monthCloses} closes</div></div>
           </div>
           {isBonusPerson(profile, comp) && ret && (
             <div className="row between wrap" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
               <div><div style={{ fontWeight: 600 }}>Churn bonus · keep churn under {ret.target}%</div><div className="small muted">{ret.cancelCount} cancellation{ret.cancelCount === 1 ? '' : 's'} this month · {ret.active} active members{ret.activeSource === 'manual' ? ' (set by Owner)' : ' (PushPress)'}</div></div>
               <div style={{ textAlign: 'right' }}>
-                <div className="display" style={{ fontSize: '2rem', color: ret.onTrack == null ? 'var(--muted)' : ret.onTrack ? 'var(--good)' : 'var(--pink)' }}>{pct(ret.churn)}</div>
-                <span className={`pill ${ret.onTrack == null ? '' : ret.onTrack ? 'good' : 'pink'}`}>{ret.onTrack == null ? 'NEEDS MEMBER COUNT' : ret.onTrack ? `ON TRACK${Number(comp.churn_bonus) ? ' · ' + money(comp.churn_bonus) : ''}` : 'OVER TARGET'}</span>
+                <div className="display" style={{ fontSize: '1.4rem', color: ret.onTrack == null ? 'var(--muted)' : ret.onTrack ? 'var(--good)' : 'var(--bad)' }}>{pct(ret.churn)}</div>
+                <span className={`pill ${ret.onTrack == null ? '' : ret.onTrack ? 'good' : 'bad'}`}>{ret.onTrack == null ? 'Needs member count' : ret.onTrack ? `On track${Number(comp.churn_bonus) ? ' · ' + money(comp.churn_bonus) : ''}` : 'Over target'}</span>
               </div>
             </div>
           )}
@@ -115,7 +115,7 @@ export default function Sales() {
       )}
 
       <div className="grid" style={{ marginBottom: 12 }}>
-        <div className="stat"><div className="label">Signed today</div><div className="value pink">{money(todayRev)}</div></div>
+        <div className="stat"><div className="label">Signed today</div><div className="value">{money(todayRev)}</div></div>
         <div className="stat"><div className="label">Calls this week</div><div className="value">{wkCalls}</div></div>
         <div className="stat"><div className="label">Meetings this week</div><div className="value">{wk('meeting').length}</div></div>
         <div className="stat"><div className="label">Closes this week</div><div className="value gold">{wk('close').length}</div></div>
@@ -124,11 +124,11 @@ export default function Sales() {
 
       <div className="card">
         <h2>Today's log</h2>
-        {log.length === 0 ? <p className="muted">Nothing logged yet. First call of the day?</p> : (
+        {log.length === 0 ? <p className="muted">No activity logged today.</p> : (
           <ul className="list">
             {log.map(e => (
               <li key={e.id}>
-                <span className={`pill ${e.kind === 'close' ? 'good' : e.kind === 'meeting' ? 'gold' : e.kind === 'eval' || e.kind === 'cancel' ? 'pink' : ''}`}>{e.kind === 'cancel' ? 'cancelled' : e.kind}</span>
+                <span className={`pill ${e.kind === 'close' ? 'good' : e.kind === 'meeting' ? 'gold' : e.kind === 'cancel' ? 'bad' : ''}`}>{e.kind === 'cancel' ? 'Cancellation' : e.kind === 'eval' ? 'Eval showed' : e.kind === 'meeting' ? 'Meeting' : e.kind === 'close' ? 'Close' : 'Calls'}</span>
                 <span className="grow"><div>{e.name || e.note}</div><div className="small muted">{[e.program, e.amount && (e.kind === 'close' || e.kind === 'cancel') ? (e.kind === 'cancel' ? '-' : '') + money(e.amount) : null, e.when_at ? fmtTime(e.when_at) : null, e.name ? e.note : null].filter(Boolean).join(' · ')} · {fmtTime(e.created_at)}</div></span>
                 <button className="btn ghost small" onClick={() => remove(e)}>×</button>
               </li>
@@ -138,10 +138,9 @@ export default function Sales() {
       </div>
 
       <div className="card">
-        <h2>Your playbook</h2>
-        <p className="small muted">Scripts, objections, the evaluation close. Read them, then run them.</p>
-        <Link to="/playbook" className="btn ghost small">Open sales SOPs</Link>
-        <Link to="/reports" className="btn ghost small" style={{ marginLeft: 8 }}>End-of-day report</Link>
+        <h2>Sales SOPs</h2>
+        <p className="small muted">Scripts, objections and the evaluation close.</p>
+        <Link to="/playbook" className="btn ghost small">Open the Playbook</Link>
       </div>
     </>
   )

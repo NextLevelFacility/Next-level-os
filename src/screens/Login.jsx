@@ -23,7 +23,7 @@ export default function Login() {
     <div className="auth">
       <div className="card">
         <h1>NEXT LEVEL <span>OS</span></h1>
-        <p className="muted">Discipline Over Everything.</p>
+        <p className="muted">Staff sign-in.</p>
         <form onSubmit={submit}>
           {mode === 'signup' && (
             <label className="field"><span>Your name</span><input className="input" value={name} onChange={e => setName(e.target.value)} required /></label>

@@ -29,8 +29,8 @@ export default function ClinicBoard({ compact = false }) {
   const pushing = shown.find(e => phaseOf(e) === 'pushing' || phaseOf(e) === 'live') || shown[0]
 
   return (
-    <div className="card accent">
-      <div className="row between"><h2>Clinics · live count</h2><Link to="/clinics" className="small">Board</Link></div>
+    <div className="card">
+      <div className="row between"><h2>Clinics</h2><Link to="/clinics" className="small">Open</Link></div>
       {shown.map(e => {
         const ph = phaseOf(e), d = daysUntil(e.starts_on), cap = e.capacity || e.goal_signups || 0
         const pct = cap ? Math.min(100, Math.round(e.signups / cap * 100)) : 0
@@ -38,15 +38,15 @@ export default function ClinicBoard({ compact = false }) {
         return (
           <div key={e.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--line)' }}>
             <div className="row between">
-              <div><span style={{ fontWeight: 600 }}>{e.name}</span> {isPush && ph !== 'live' && <span className="pill pink">PUSHING NOW</span>}{ph === 'live' && <span className="pill good">LIVE</span>}{ph === 'upcoming' && <span className="pill">push from {fmtDate(e.push_from)}</span>}</div>
-              <span className="display" style={{ fontSize: '1.6rem', color: pct >= 100 ? 'var(--good)' : 'var(--pink)' }}>{e.signups}<span className="muted" style={{ fontSize: '0.9rem' }}> / {cap || '—'}</span></span>
+              <div><span style={{ fontWeight: 600 }}>{e.name}</span> {isPush && ph !== 'live' && <span className="pill gold">Pushing now</span>}{ph === 'live' && <span className="pill good">Running</span>}{ph === 'upcoming' && <span className="pill">Push from {fmtDate(e.push_from)}</span>}</div>
+              <span className="display" style={{ fontSize: '1.05rem', color: pct >= 100 ? 'var(--good)' : 'var(--text)' }}>{e.signups}<span className="muted" style={{ fontSize: '0.85rem', fontWeight: 500 }}> / {cap || '—'}</span></span>
             </div>
             <div className="progress" style={{ marginTop: 6 }}><div style={{ width: pct + '%' }} /></div>
             <div className="small muted" style={{ marginTop: 4 }}>{fmtDate(e.starts_on)}{e.ends_on ? ` – ${fmtDate(e.ends_on)}` : ''}{d != null && d >= 0 ? ` · ${d} days out` : ''}{!compact && e.revenue ? ` · ${money(e.revenue)} collected` : ''}{e.goal_signups ? ` · goal ${e.goal_signups}` : ''}</div>
           </div>
         )
       })}
-      {!compact && <Link to="/clinics" className="btn gold small" style={{ marginTop: 10 }}>+ Add a sign-up</Link>}
+      {!compact && <Link to="/clinics" className="btn ghost small" style={{ marginTop: 10 }}>Add a sign-up</Link>}
     </div>
   )
 }

@@ -60,3 +60,16 @@ export function render(note) {
 
 export const sops = () => notes.filter(n => n.tags.includes('sop') && !/template/i.test(n.title))
 export const inFolder = (prefix) => notes.filter(n => n.folder.startsWith(prefix))
+
+// What staff see. Owner/Operator see the whole vault; everyone else gets the operating playbook only —
+// no strategy, growth, finance, locations, people files or templates.
+export const STAFF_FOLDERS = ['01 - Foundation', '03 - SOPs & Standards', '04 - People & Culture', '05 - Members & Programs']
+const STAFF_HIDE = /finance|admin|expansion|hiring|org chart|positioning/i
+export function canSee(note, roles) {
+  const list = Array.isArray(roles) ? roles : [roles]
+  if (list.some(r => r === 'owner' || r === 'operator')) return true
+  if (!STAFF_FOLDERS.includes(note.folder)) return false
+  if (STAFF_HIDE.test(note.title) || note.tags.some(t => /finance|admin/.test(t))) return false
+  return true
+}
+export const visibleNotes = (roles) => notes.filter(n => canSee(n, roles))

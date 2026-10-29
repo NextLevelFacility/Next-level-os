@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
 import { supabase, today, ROLES, hours, fmtDate } from '../lib/supabase'
 import { callFn, money } from '../lib/api'
-import { REPORT_TYPES } from './Reports.jsx'
 import ClinicBoard from '../components/ClinicBoard.jsx'
 import { loadComp, loadRetention, pct } from '../lib/comp'
 
@@ -41,9 +40,8 @@ export default function Dashboard() {
   }, [loc])
 
   if (!d) return <p className="muted">Loading…</p>
-  const sum = (kind, key, days = 0) => d.reports.filter(r => r.kind === kind && (!days || r.report_date >= daysAgo(days))).reduce((a, r) => a + (Number(r.data?.[key]) || 0), 0)
   const checklistsDone = d.runs.filter(r => r.done).length
-  const incidents = d.reports.filter(r => r.kind === 'incident')
+  const injuries = d.reports.filter(r => r.kind === 'injury' || r.kind === 'incident')
   const onClock = d.time.filter(t => !t.clock_out)
   const kpiOf = uid => d.kpis.find(k => k.user_id === uid)?.data || {}
   const goalRows = d.people.map(p => {
@@ -97,19 +95,19 @@ export default function Dashboard() {
       ) : pp.error ? <div className="card"><p className="flag">PushPress: {pp.error}</p></div> : (
         <>
           <div className="grid">
-            <Stat label="Active members" value={pp.active ?? pp.total ?? '—'} tone="gold" sub={pp.active_enrollments ? `${pp.active_enrollments} plans running` : 'from PushPress'} />
+            <Stat label="Active members" value={pp.active ?? pp.total ?? '—'} tone="gold" sub={pp.active_enrollments ? `paying, not paused · ${pp.active_enrollments} plans` : 'from PushPress'} />
             {pp.leads != null && <Stat label="Leads" value={pp.leads} sub="in PushPress · call list" />}
             {pp.cancellations_month != null && <Stat label="Cancelled this month" value={pp.cancellations_month} tone={pp.cancellations_month ? 'pink' : ''} sub="plans that ended" />}
             {pp.pending_cancel != null && <Stat label="Leaving" value={pp.pending_cancel} tone={pp.pending_cancel ? 'pink' : ''} sub="cancelled, still active · save them" />}
             {pp.alerts != null && <Stat label="Payment alerts" value={pp.alerts} tone={pp.alerts ? 'pink' : ''} sub="card failed · fix today" />}
-            {pp.paused != null && <Stat label="Paused" value={pp.paused} sub="on hold" />}
+            {pp.paused != null && <Stat label="Paused" value={pp.paused} sub="members on hold · not counted as active" />}
             {pp.ex_members != null && <Stat label="Ex-members" value={pp.ex_members} sub="win-back list" />}
           </div>
-          {pp.plans?.length > 0 && <div className="card"><h3>Running plans · by name</h3><ul className="list">{pp.plans.map(([n, c]) => <li key={n}><span className="grow">{n}</span><b>{c}</b></li>)}</ul></div>}
+          {pp.plans?.length > 0 && <div className="card"><h3>Active plans · by name</h3><ul className="list">{pp.plans.map(([n, c]) => <li key={n}><span className="grow">{n}</span><b>{c}</b></li>)}</ul></div>}
           {(pp.alert_list?.length > 0 || pp.leaving?.length > 0 || pp.cancelled?.length > 0) && (
             <div className="card">
-              {pp.alert_list?.length > 0 && <><h3>Payment failed · call today</h3><ul className="list">{pp.alert_list.map((c, i) => <li key={'a' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="pill pink">ALERT</span></li>)}</ul></>}
-              {pp.leaving?.length > 0 && <><h3 style={{ marginTop: pp.alert_list?.length ? 12 : 0 }}>Leaving · save them this week</h3><ul className="list">{pp.leaving.slice(0, 10).map((c, i) => <li key={'l' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="pill pink">{c.at ? 'ends ' + new Date(c.at).toLocaleDateString() : 'ending'}</span></li>)}</ul></>}
+              {pp.alert_list?.length > 0 && <><h3>Payment failed · call today</h3><ul className="list">{pp.alert_list.map((c, i) => <li key={'a' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="pill bad">Payment failed</span></li>)}</ul></>}
+              {pp.leaving?.length > 0 && <><h3 style={{ marginTop: pp.alert_list?.length ? 12 : 0 }}>Leaving · save them this week</h3><ul className="list">{pp.leaving.slice(0, 10).map((c, i) => <li key={'l' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="pill bad">{c.at ? 'Ends ' + new Date(c.at).toLocaleDateString() : 'Ending'}</span></li>)}</ul></>}
               {pp.cancelled?.length > 0 && <><h3 style={{ marginTop: 12 }}>Cancelled this month</h3><ul className="list">{pp.cancelled.slice(0, 10).map((c, i) => <li key={'c' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="small muted">{c.at ? new Date(c.at).toLocaleDateString() : ''}</span></li>)}</ul></>}
             </div>
           )}
@@ -123,7 +121,7 @@ export default function Dashboard() {
             <Stat label="Churn" value={pct(ret.churn)} tone={ret.onTrack == null ? '' : ret.onTrack ? 'gold' : 'pink'} sub={`target under ${ret.target}%`} />
             <Stat label="Cancellations" value={ret.cancelCount} sub={ret.lostMrr ? `-${money(ret.lostMrr)}/mo lost` : ''} />
             <Stat label="Active members" value={ret.active || '—'} sub={ret.activeSource === 'PushPress' ? 'from PushPress' : 'set on Team → Hours & pay'} />
-            <Stat label="Churn bonus" value={ret.onTrack == null ? '—' : ret.onTrack ? 'ON TRACK' : 'MISSED'} tone={ret.onTrack ? 'gold' : 'pink'} sub={(comp?.bonus_people || []).join(' · ')} />
+            <Stat label="Churn bonus" value={ret.onTrack == null ? '—' : ret.onTrack ? 'On track' : 'Missed'} tone={ret.onTrack ? 'gold' : ''} sub={(comp?.bonus_people || []).join(' · ')} />
           </div>
           {ret.cancels.length > 0 && <ul className="list" style={{ marginTop: 8 }}>{ret.cancels.slice(0, 8).map(c => <li key={c.id}><span className="grow small"><div>{c.name} <span className="muted">· {c.program || ''}</span></div><div className="muted">{c.note} · {c.log_date}</div></span>{c.amount ? <span className="pill pink">-{money(c.amount)}/mo</span> : null}</li>)}</ul>}
         </div>
@@ -151,8 +149,8 @@ export default function Dashboard() {
       <h2>Today on the floor</h2>
       <div className="grid">
         <Stat label="On the clock now" value={onClock.length} tone="gold" sub={onClock.map(t => t.profiles?.full_name?.split(' ')[0]).filter(Boolean).join(', ') || 'nobody'} />
-        <Stat label="Checklists complete" value={`${checklistsDone} / ${d.templates.length}`} tone={checklistsDone < d.templates.length ? 'pink' : 'gold'} />
-        <Stat label="Reports filed" value={d.reports.filter(r => r.report_date === today()).length} />
+        <Stat label="Checklists complete" value={`${checklistsDone} / ${d.templates.length}`} tone={checklistsDone < d.templates.length ? '' : 'gold'} />
+        <Stat label="Injury reports · 7 days" value={injuries.length} tone={injuries.length ? 'pink' : ''} />
         <Stat label="Sessions · 7 days" value={sessions7} sub={`${athletes7} athlete-sessions`} />
         <Stat label="Hours · this week" value={hours(d.time.reduce((a, t) => a + ((t.clock_out ? new Date(t.clock_out) : new Date()) - new Date(t.clock_in)), 0))} />
         <Stat label="In onboarding" value={d.hires.length} />
@@ -164,39 +162,17 @@ export default function Dashboard() {
         <Stat label="Meetings booked" value={d.salesLog.filter(x => x.kind === 'meeting').length} />
         <Stat label="Evals showed" value={d.salesLog.filter(x => x.kind === 'eval').length} />
         <Stat label="Closes" value={d.salesLog.filter(x => x.kind === 'close').length} tone="gold" />
-        <Stat label="Signed" value={money(d.salesLog.filter(x => x.kind === 'close').reduce((a, x) => a + (Number(x.amount) || 0), 0))} tone="pink" />
+        <Stat label="Signed" value={money(d.salesLog.filter(x => x.kind === 'close').reduce((a, x) => a + (Number(x.amount) || 0), 0))} tone="gold" />
       </div>
       {d.salesLog.some(x => x.kind === 'close') && (
         <div className="card"><h3>Closes</h3><ul className="list">{d.salesLog.filter(x => x.kind === 'close').slice(0, 10).map(x => <li key={x.id}><span className="grow"><div>{x.name} <span className="muted small">· {x.program || ''}</span></div><div className="small muted">{x.profiles?.full_name} · {x.log_date}</div></span><b>{money(x.amount)}</b></li>)}</ul></div>
       )}
 
-      <h2>End-of-day sales reports · 7 days</h2>
-      <div className="grid">
-        <Stat label="Calls" value={sum('sales', 'calls', 7)} />
-        <Stat label="Meetings booked" value={sum('sales', 'meetings_booked', 7)} />
-        <Stat label="Evals showed" value={sum('sales', 'evals_showed', 7)} />
-        <Stat label="Closes" value={sum('sales', 'closed', 7)} tone="gold" />
-        <Stat label="New revenue signed" value={money(sum('sales', 'revenue', 7))} tone="pink" />
-      </div>
-
-      {incidents.length > 0 && (
-        <div className="card" style={{ borderColor: 'var(--pink)' }}>
-          <h2 style={{ color: 'var(--pink)', marginTop: 0 }}>Incidents · 7 days</h2>
-          <ul className="list">{incidents.map(r => <li key={r.id}><span className="grow"><div>{r.data.what}</div><div className="small muted">{r.profiles?.full_name} · {r.report_date}{r.data.followup && <span className="flag"> · follow-up: {r.data.followup}</span>}</div></span></li>)}</ul>
-        </div>
-      )}
-
-      <div className="card">
-        <h2 style={{ marginTop: 0 }}>Latest staff reports</h2>
-        <ul className="list">
-          {d.reports.slice(0, 10).map(r => (
-            <li key={r.id}><span className="grow">
-              <div><span className="pill gold">{REPORT_TYPES[r.kind]?.label || r.kind}</span> <span className="small muted">{r.profiles?.full_name} · {new Date(r.created_at).toLocaleString()}</span></div>
-              <div className="small" style={{ marginTop: 4 }}>{Object.entries(r.data).filter(([, v]) => v !== '' && v != null).map(([k, v]) => <span key={k} style={{ marginRight: 10 }}><span className="muted">{k.replace(/_/g, ' ')}:</span> {String(v)}</span>)}</div>
-            </span></li>
-          ))}
-          {d.reports.length === 0 && <li className="muted">No reports in the last 7 days.</li>}
-        </ul>
+      <div className="card" style={injuries.length ? { borderColor: 'rgba(229,72,77,0.5)' } : {}}>
+        <h2 style={{ marginTop: 0 }}>Injury reports · 7 days</h2>
+        {injuries.length === 0 ? <p className="muted small" style={{ margin: 0 }}>None filed.</p> : (
+          <ul className="list">{injuries.map(r => <li key={r.id} style={{ alignItems: 'flex-start' }}><span className={`pill ${/Serious/.test(r.data?.severity || '') ? 'bad' : /Moderate/.test(r.data?.severity || '') ? 'gold' : ''}`}>{(r.data?.severity || 'Injury').split(' ')[0]}</span><span className="grow"><div style={{ fontWeight: 500 }}>{r.data?.athlete} <span className="muted small">· {r.data?.injury}</span></div><div className="small muted">{r.data?.what}</div><div className="small muted">{r.profiles?.full_name} · {r.data?.when ? new Date(r.data.when).toLocaleString() : r.report_date}{r.data?.followup && <span className="flag"> · follow-up: {r.data.followup}</span>}</div></span></li>)}</ul>
+        )}
       </div>
 
       {d.questions.length > 0 && (

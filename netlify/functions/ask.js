@@ -5,8 +5,13 @@ import vault from './vault-content.json'
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5'
 
-function playbookText() {
-  return vault.docs.map(d => `\n\n===== ${d.path} =====\n${d.body}`).join('')
+const STAFF_FOLDERS = ['01 - Foundation', '03 - SOPs & Standards', '04 - People & Culture', '05 - Members & Programs']
+const STAFF_HIDE = /finance|admin|expansion|hiring|org chart|positioning/i
+// Owner/Operator get the whole vault; everyone else only the operating playbook (no strategy, finance, locations, people files).
+function playbookText(roles = []) {
+  const all = roles.some(r => r === 'owner' || r === 'operator')
+  const docs = all ? vault.docs : vault.docs.filter(d => STAFF_FOLDERS.some(f => d.path.startsWith(f + '/')) && !STAFF_HIDE.test(d.path.split('/').pop()))
+  return docs.map(d => `\n\n===== ${d.path} =====\n${d.body}`).join('')
 }
 
 export const handler = async (event) => {
@@ -30,12 +35,12 @@ How to answer:
 - Answer from the Playbook below first. Quote the SOP name you're using (e.g. "per the Sales & Membership SOP"). If the Playbook doesn't cover it, say so plainly, give your best practical guidance, and suggest they ask their manager or flag it as a missing SOP.
 - Be short and direct. Steps as a numbered list. No fluff. Speak like a sharp, supportive coach. Discipline Over Everything.
 - Never invent prices, dates, policies or numbers that aren't in the Playbook. If asked for pricing or program details, use only what's written.
-- Keep private things private: don't reveal other staff members' pay or personal details.
-- If someone asks how to do something in the app: Today (goals, clock in/out), Athletes (roster, log a session, player reports), Method (Simon's modules), Playbook (SOPs), Checklists, Reports, Hires (onboarding), Team, CEO/KPIs (managers).
+- Keep private things private: don't reveal other staff members' pay or personal details. Never share revenue, profit, owner strategy or expansion plans with anyone who isn't the Owner or Operator — if asked, say that's for the Owner.
+- If someone asks how to do something in the app: Today (goals, clock in/out), Athletes (roster, log a session, player reports), Method (Simon's modules), Playbook (SOPs), Checklists, Injury report, Hires (onboarding), Team, CEO/KPIs (managers).
 
 The person asking: ${p.full_name || 'Staff member'} (${p.role || 'staff'}).`,
     },
-    { type: 'text', text: `THE NEXT LEVEL PLAYBOOK (Obsidian vault, built ${vault.builtAt}):${playbookText()}`, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: `THE NEXT LEVEL PLAYBOOK (Obsidian vault, built ${vault.builtAt}):${playbookText([p.role, ...(p.roles || [])])}`, cache_control: { type: 'ephemeral' } },
   ]
   // SOPs rewritten in the app (SOP Studio) are the current version — they override the vault outline.
   try {

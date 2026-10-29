@@ -142,7 +142,8 @@ export const handler = async (event) => {
     const monthStart = since(), now = new Date()
 
     const st = (e) => norm(e.status)
-    const running = enrollments.filter(e => st(e) === 'active' || st(e) === 'alert' || /^pending/.test(st(e)))
+    // Active = paying and not paused (Gabriel's definition): plans in status 'active'. Paused and failed-payment plans are reported separately.
+    const running = enrollments.filter(e => st(e) === 'active' || /^pending/.test(st(e)))
     const paused = enrollments.filter(e => st(e) === 'paused')
     const alerts = enrollments.filter(e => st(e) === 'alert')
     const canceled = enrollments.filter(e => /cancel/.test(st(e)))
@@ -153,14 +154,18 @@ export const handler = async (event) => {
     const cancelled = canceled.filter(e => { const d = endOf(e); return d && d <= now && d >= monthStart }).map(e => ({ name: enrName(e), plan: planLabel(e), at: endOf(e).toISOString() }))
     const alertList = alerts.map(e => ({ name: enrName(e), plan: planLabel(e), at: e.nextCharge || e.lastCharge || null }))
 
-    // Active members = people PushPress itself calls members (role). Falls back to unique customers on a running plan.
-    const active = members.length || new Set(running.map(e => e.customerId)).size || null
+    // Active members = unique people with a paying, not-paused plan. PushPress's own "member" role count is kept for reference.
+    const activeIds = new Set(running.map(e => e.customerId).filter(Boolean))
+    const pausedIds = new Set(paused.map(e => e.customerId).filter(Boolean))
+    const alertIds = new Set(alerts.map(e => e.customerId).filter(Boolean))
+    const active = enrollments.length ? activeIds.size : (members.length || null)
 
     memo = { at: Date.now(), body: {
       connected: true,
       company: pr.company?.name || pr.company?.data?.name || null,
       active, total: customers.length, leads, ex_members: exMembers, cancelled_total: exMembers || canceled.length,
-      active_enrollments: running.length, paused: paused.length, alerts: alerts.length,
+      pushpress_members: members.length,
+      active_enrollments: running.length, paused: pausedIds.size, paused_plans: paused.length, alerts: alertIds.size,
       alert_list: alertList.slice(0, 20),
       plans: Object.entries(plans).sort((a, b) => b[1] - a[1]).slice(0, 12),
       cancellations_month: cancelled.length,

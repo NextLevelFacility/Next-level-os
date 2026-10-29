@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
-import { supabase, ROLES, isDirector } from '../lib/supabase'
+import { supabase, ROLES, isDirector, isManager } from '../lib/supabase'
 import { useSops, departments, STATUS } from '../lib/sops'
 import { slugify } from '../lib/vault'
 
@@ -14,10 +14,10 @@ export default function SopStudio() {
   const [adding, setAdding] = useState(null)   // { dept, title }
   if (!isDirector(roles)) return <div className="empty">SOP Studio is for the Owner, Operator and Directors.</div>
 
-  const depts = departments().map(d => d.title)
+  const depts = departments().filter(d => isManager(roles) || !d.tags.some(t => /finance|admin/.test(t))).map(d => d.title)
   const extraDepts = [...new Set(sops.map(s => s.dept).filter(d => !depts.includes(d)))]
   const written = sops.filter(s => s.body).length, live = sops.filter(s => s.status === 'published').length, withVideo = sops.filter(s => s.video_url).length
-  const shown = sops.filter(s => filter === 'all' || (filter === 'todo' && !s.body) || (filter === 'video' && !s.video_url) || (filter === 'live' && s.status === 'published'))
+  const shown = sops.filter(s => depts.includes(s.dept) || extraDepts.includes(s.dept)).filter(s => filter === 'all' || (filter === 'todo' && !s.body) || (filter === 'video' && !s.video_url) || (filter === 'live' && s.status === 'published'))
 
   async function addSop(e) {
     e.preventDefault()

@@ -62,7 +62,7 @@ export default function App() {
     sales: ['/sales', 'Sales', icons.sales],
     playbook: ['/playbook', 'Playbook', icons.playbook],
     checklists: ['/checklists', 'Checklists', icons.checklists],
-    reports: ['/reports', 'Reports', icons.reports],
+    reports: ['/reports', 'Injury report', icons.reports],
     hires: ['/onboarding', manager ? 'Hires' : 'My plan', icons.onboarding],
     team: ['/team', 'Team', icons.team],
     ceo: ['/dashboard', role === 'owner' ? 'CEO' : 'KPIs', icons.dashboard],

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { notes, folders } from '../lib/vault'
+import { visibleNotes } from '../lib/vault'
 import { roleMatches } from './Today.jsx'
 import { ROLES, isManager } from '../lib/supabase'
 import { supabase } from '../lib/supabase'
@@ -10,6 +10,8 @@ import { useSops, sopFor } from '../lib/sops'
 export default function Playbook() {
   const { user, roles } = useAuth()
   const { sops: allSops } = useSops()
+  const notes = visibleNotes(roles)
+  const folders = [...new Set(notes.map(n => n.folder))].filter(Boolean).sort()
   const [q, setQ] = useState('')
   const [reads, setReads] = useState(new Set())
   useEffect(() => {
@@ -27,7 +29,7 @@ export default function Playbook() {
   return (
     <>
       <h1>Playbook</h1>
-      <p className="muted">Every SOP, standard and belief. Written once, followed everywhere.</p>
+      <p className="muted">The standards and procedures Next Level runs on.</p>
       <input className="input" placeholder="Search the playbook…" value={q} onChange={e => setQ(e.target.value)} style={{ marginBottom: 14 }} />
       {mineTotal > 0 && (
         <div className="card accent">

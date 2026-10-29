@@ -66,7 +66,7 @@ export default function Today() {
           <ul className="list">
             {tasks.filter(t => !t.done && t.owner === 'hire').slice(0, 4).map(t => <li key={t.id}><span className="pill gold">{t.c}</span><span className="grow">{t.text}</span></li>)}
           </ul>
-          <Link className="btn gold small" to={`/onboarding/${hire.id}`}>Open my 30-day plan</Link>
+          <Link className="btn small" to={`/onboarding/${hire.id}`}>Open my 30-day plan</Link>
         </div>
       )}
 
@@ -74,7 +74,7 @@ export default function Today() {
         <div className="card">
           <div className="row between"><h2>Sales board</h2><Link to="/sales" className="small">Open</Link></div>
           <p className="muted small">Log every call, meeting and close. The goals above update as you go.</p>
-          <Link className="btn block" to="/sales">Open the sales board</Link>
+          <Link className="btn ghost block" to="/sales">Open the sales board</Link>
         </div>
       )}
 
@@ -83,10 +83,10 @@ export default function Today() {
           <div className="row between"><h2>Sessions</h2><Link to="/athletes" className="small">Athletes</Link></div>
           {sessionsToday.length === 0 ? <p className="muted">No sessions logged yet today.</p> : (
             <ul className="list">
-              {sessionsToday.map(s => <li key={s.id}><span className="pill pink">{s.start_time ? s.start_time.slice(0, 5) : '—'}</span><span className="grow">{s.session_type || 'Session'} <span className="muted small">· {s.session_athletes?.[0]?.count ?? 0} players</span></span><Link className="btn ghost small" to={`/sessions/${s.id}`}>Open</Link></li>)}
+              {sessionsToday.map(s => <li key={s.id}><span className="pill">{s.start_time ? s.start_time.slice(0, 5) : '—'}</span><span className="grow">{s.session_type || 'Session'} <span className="muted small">· {s.session_athletes?.[0]?.count ?? 0} players</span></span><Link className="btn ghost small" to={`/sessions/${s.id}`}>Open</Link></li>)}
             </ul>
           )}
-          <Link className="btn block" to="/sessions/new" style={{ marginTop: 10 }}>+ Log a session</Link>
+          <Link className="btn ghost block" to="/sessions/new" style={{ marginTop: 10 }}>Log a session</Link>
           {modules.total > 0 && <p className="small muted" style={{ marginTop: 10 }}>Method: {modules.done} of {modules.total} modules complete · <Link to="/method">continue</Link></p>}
         </div>
       )}
@@ -95,14 +95,9 @@ export default function Today() {
         <div className="row between"><h2>Checklists</h2><Link to="/checklists" className="small">All</Link></div>
         {openChecklists.length === 0 ? <p className="muted">Everything for today is done. ✓</p> : (
           <ul className="list">
-            {openChecklists.map(t => <li key={t.id}><span className="pill pink">{t.slot}</span><span className="grow title">{t.name}</span><Link className="btn small" to="/checklists">Open</Link></li>)}
+            {openChecklists.map(t => <li key={t.id}><span className="pill">{t.slot}</span><span className="grow title">{t.name}</span><Link className="btn small" to="/checklists">Open</Link></li>)}
           </ul>
         )}
-      </div>
-
-      <div className="card">
-        <div className="row between"><h2>Reports</h2><Link to="/reports" className="small">File one</Link></div>
-        <p className="muted">{reportsToday === 0 ? 'No report filed today yet.' : `${reportsToday} report${reportsToday > 1 ? 's' : ''} filed today.`}</p>
       </div>
 
       <div className="card">
@@ -111,16 +106,17 @@ export default function Today() {
           <>
             <p className="muted small">{unread.length} to read</p>
             <ul className="list">
-              {unread.slice(0, 4).map(n => <li key={n.key}><span className="grow title">{n.title}{n.video && <span className="pill pink" style={{ marginLeft: 6 }}>▶</span>}</span><Link className="btn ghost small" to={n.to}>Read</Link></li>)}
+              {unread.slice(0, 4).map(n => <li key={n.key}><span className="grow title">{n.title}{n.video && <span className="pill" style={{ marginLeft: 6 }}>video</span>}</span><Link className="btn ghost small" to={n.to}>Read</Link></li>)}
             </ul>
           </>
         )}
       </div>
 
-      <div className="card accent">
-        <h2>Stuck on something?</h2>
-        <p className="muted small">Ask the Next Level assistant. It knows every SOP, standard and belief in the Playbook.</p>
-        <Link className="btn gold small" to="/ask">Ask a question</Link>
+      <div className="card">
+        <div className="row between wrap" style={{ gap: 8 }}>
+          <div><h2 style={{ margin: 0 }}>Need an answer?</h2><p className="muted small" style={{ margin: 0 }}>Ask Next Level knows every SOP and standard. Injuries get reported under Injury report.</p></div>
+          <div className="row" style={{ gap: 6 }}><Link className="btn ghost small" to="/reports">Injury report</Link><Link className="btn small" to="/ask">Ask</Link></div>
+        </div>
       </div>
     </>
   )
