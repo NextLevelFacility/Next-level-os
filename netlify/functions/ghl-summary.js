@@ -99,7 +99,7 @@ async function summary() {
       const stages = await Promise.all((main.stages || []).slice(0, 12).map(async st => [st.name, (await oppCount(`status=open&pipeline_id=${encodeURIComponent(main.id)}&pipeline_stage_id=${encodeURIComponent(st.id)}`)).total]))
       byStage = stages.map(([n, c]) => [`${main.name} · ${n}`, c])
     }
-    const won = await oppList(`status=won&date=${encodeURIComponent(startMonth.toISOString())}`, 2)
+    const won = await oppList(`status=won&date=${String(t.m).padStart(2, '0')}-01-${t.y}`, 2)   // GHL wants mm-dd-yyyy
     const wonM = won.filter(o => new Date(o.lastStatusChangeAt || o.updatedAt || o.createdAt) >= startMonth)
     wonMonth = wonM.length; wonValue = wonM.reduce((a, o) => a + (Number(o.monetaryValue) || 0), 0)
   } catch (e) { oppErr = String(e.message) }
