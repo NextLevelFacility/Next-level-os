@@ -130,7 +130,7 @@ export default function Dashboard() {
             <Stat label="Showed · 7 days" value={ghl.appointments.showed7} sub={`${ghl.appointments.noshow7} no-shows`} />
           </div>
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-            {ghl.pipeline.byPipeline?.length > 0 && <div className="card" style={{ margin: 0 }}><h3 style={{ marginTop: 0 }}>Open by pipeline</h3><ul className="list">{ghl.pipeline.byPipeline.map(([n, c]) => <li key={n}><span className="grow small">{n}</span><b>{c}</b></li>)}</ul></div>}
+            {ghl.pipeline.byPipeline?.length > 0 && <div className="card" style={{ margin: 0 }}><h3 style={{ marginTop: 0 }}>Open by pipeline</h3><ul className="list">{ghl.pipeline.byPipeline.filter(([, c]) => c > 0).map(([n, c]) => <li key={n}><span className="grow small">{n}</span><b>{c}</b></li>)}</ul></div>}
             {ghl.pipeline.byStage?.length > 0 && <div className="card" style={{ margin: 0 }}><h3 style={{ marginTop: 0 }}>Sales pipeline by stage</h3><ul className="list">{ghl.pipeline.byStage.map(([n, c]) => <li key={n}><span className="grow small">{n.split(' · ').slice(1).join(' · ')}</span><b>{c}</b></li>)}</ul></div>}
             {ghl.leads.sources?.length > 0 && <div className="card" style={{ margin: 0 }}><h3 style={{ marginTop: 0 }}>Lead sources · month</h3><ul className="list">{ghl.leads.sources.map(([n, c]) => <li key={n}><span className="grow small">{n}</span><b>{c}</b></li>)}</ul></div>}
           </div>
