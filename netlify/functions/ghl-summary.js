@@ -4,8 +4,15 @@ import { requireUser, json } from './_auth.js'
 import { cached } from './_cache.js'
 
 const BASE = 'https://services.leadconnectorhq.com'
-const KEY = () => (process.env.GHL_API_KEY || '').trim()
-const LOC = () => (process.env.GHL_LOCATION_ID || '').trim()
+// Accepts the token and location id either in their own variables or pasted together into GHL_API_KEY.
+function creds() {
+  const parts = (process.env.GHL_API_KEY || '').split(/[\s,;|]+/).filter(Boolean)
+  const key = parts.find(x => /^pit-/i.test(x)) || parts.find(x => x.length > 36) || parts[0] || ''
+  const loc = (process.env.GHL_LOCATION_ID || '').trim() || parts.find(x => x !== key && /^[A-Za-z0-9]{15,32}$/.test(x)) || ''
+  return { key, loc }
+}
+const KEY = () => creds().key
+const LOC = () => creds().loc
 const headers = () => ({ Authorization: `Bearer ${KEY()}`, Version: '2021-07-28', Accept: 'application/json', 'Content-Type': 'application/json' })
 
 async function ghl(path, init = {}) {
@@ -59,7 +66,7 @@ async function appointments(startMs, endMs) {
 }
 
 async function summary() {
-  if (!LOC()) return { connected: true, error: 'Add GHL_LOCATION_ID in Netlify (Settings → Business Profile in GoHighLevel, or the id in the URL after /location/).' }
+  if (!LOC()) return { connected: true, error: 'Add GHL_LOCATION_ID in Netlify → Environment variables: GoHighLevel → Settings → Business Profile → Location ID (also the id in your GHL URL after /location/).' }
   const now = new Date(), t = tzParts(now)
   const startToday = tzMidnight(t.y, t.m, t.d, now), start7 = new Date(startToday.getTime() - 6 * 864e5), startMonth = tzMidnight(t.y, t.m, 1, now)
   const weekAhead = new Date(startToday.getTime() + 7 * 864e5)
@@ -111,6 +118,7 @@ export const handler = async (event) => {
   const ctx = await requireUser(event)
   if (!ctx) return json(401, { error: 'Sign in required' })
   if (!KEY()) return json(200, { connected: false, hint: 'Add GHL_API_KEY and GHL_LOCATION_ID in Netlify → Environment variables.' })
+  if (!/^pit-/i.test(KEY()) && KEY().length < 36) return json(200, { connected: true, error: 'GHL_API_KEY does not look like a Private Integration token (they start with "pit-"). In GoHighLevel: Settings → Private Integrations → create one → copy the token into GHL_API_KEY. The Location ID goes in GHL_LOCATION_ID.' })
   let body = {}
   try { body = JSON.parse(event.body || '{}') } catch {}
   const run = async () => { try { return await summary() } catch (e) { return { connected: true, error: String(e.message || e) } } }
