@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
 import { supabase, ROLES, isManager, isCoach, today } from '../lib/supabase'
 import { sops } from '../lib/vault'
+import { useSops, sopFor } from '../lib/sops'
 import Clock from '../components/Clock.jsx'
 import Goals from '../components/Goals.jsx'
 import ClinicBoard from '../components/ClinicBoard.jsx'
@@ -17,6 +18,7 @@ export default function Today() {
   const [reportsToday, setReportsToday] = useState(0)
   const [sessionsToday, setSessionsToday] = useState([])
   const [modules, setModules] = useState({ total: 0, done: 0 })
+  const { sops: allSops } = useSops()
 
   useEffect(() => {
     (async () => {
@@ -42,7 +44,8 @@ export default function Today() {
   }, [roles.join(','), locationId, user.id])
 
   const mySops = sops().filter(n => roleMatches(n, roles))
-  const unread = mySops.filter(n => !reads.has(n.path))
+  const liveSops = sopFor(allSops.filter(s => s.status === 'published'), roles)
+  const unread = [...liveSops.filter(s => !reads.has(s.key)).map(s => ({ key: s.key, title: s.title, to: `/sop/${encodeURIComponent(s.key)}`, video: !!s.video_url })), ...mySops.filter(n => !reads.has(n.path)).map(n => ({ key: n.path, title: n.title, to: `/playbook/${n.slug}` }))]
   const openChecklists = templates.filter(t => !runs.find(r => r.template_id === t.id && r.done))
   const hour = new Date().getHours()
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -108,7 +111,7 @@ export default function Today() {
           <>
             <p className="muted small">{unread.length} to read</p>
             <ul className="list">
-              {unread.slice(0, 4).map(n => <li key={n.path}><span className="grow title">{n.title}</span><Link className="btn ghost small" to={`/playbook/${n.slug}`}>Read</Link></li>)}
+              {unread.slice(0, 4).map(n => <li key={n.key}><span className="grow title">{n.title}{n.video && <span className="pill pink" style={{ marginLeft: 6 }}>▶</span>}</span><Link className="btn ghost small" to={n.to}>Read</Link></li>)}
             </ul>
           </>
         )}

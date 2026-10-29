@@ -22,6 +22,8 @@ import ModulePage from './screens/ModulePage.jsx'
 import Ask from './screens/Ask.jsx'
 import Clinics from './screens/Clinics.jsx'
 import Sales from './screens/Sales.jsx'
+import SopStudio from './screens/SopStudio.jsx'
+import SopPage from './screens/SopPage.jsx'
 
 const Icon = ({ d }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
 export const icons = {
@@ -66,6 +68,7 @@ export default function App() {
     ceo: ['/dashboard', role === 'owner' ? 'CEO' : 'KPIs', icons.dashboard],
     ask: ['/ask', 'Ask', icons.ask],
     clinics: ['/clinics', 'Clinics', icons.clinics],
+    sops: ['/sops', 'SOP Studio', icons.playbook],
     settings: ['/settings', 'You', icons.settings],
   }
   const wants = ['today']
@@ -74,8 +77,8 @@ export default function App() {
   if (roles.includes('sales')) wants.push('sales', 'playbook', 'clinics')
   if (roles.includes('frontdesk')) wants.push('checklists', 'playbook', 'clinics')
   if (role === 'newhire') wants.push('hires', 'playbook')
-  wants.push('ask', 'method', 'clinics', 'playbook', 'checklists', 'reports', 'sales', 'hires', 'team', 'settings')
-  const ordered = [...new Set(wants)].filter(k => k !== 'hires' || manager || role === 'newhire').filter(k => k !== 'ceo' || manager).filter(k => k !== 'sales' || roles.includes('sales') || manager)
+  wants.push('ask', 'method', 'clinics', 'playbook', 'sops', 'checklists', 'reports', 'sales', 'hires', 'team', 'settings')
+  const ordered = [...new Set(wants)].filter(k => k !== 'hires' || manager || role === 'newhire').filter(k => k !== 'ceo' || manager).filter(k => k !== 'sales' || roles.includes('sales') || manager).filter(k => k !== 'sops' || isDirector(roles))
   const primary = ordered.slice(0, 4), extra = ordered.slice(4)
   const isExtraActive = extra.some(k => loc.pathname.startsWith(all[k][0]) && all[k][0] !== '/')
 
@@ -127,6 +130,8 @@ export default function App() {
           <Route path="/ask" element={<Ask />} />
           <Route path="/clinics" element={<Clinics />} />
           <Route path="/sales" element={<Sales />} />
+          <Route path="/sops" element={isDirector(roles) ? <SopStudio /> : <Navigate to="/playbook" />} />
+          <Route path="/sop/:key" element={<SopPage />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

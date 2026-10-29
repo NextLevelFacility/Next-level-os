@@ -37,6 +37,11 @@ The person asking: ${p.full_name || 'Staff member'} (${p.role || 'staff'}).`,
     },
     { type: 'text', text: `THE NEXT LEVEL PLAYBOOK (Obsidian vault, built ${vault.builtAt}):${playbookText()}`, cache_control: { type: 'ephemeral' } },
   ]
+  // SOPs rewritten in the app (SOP Studio) are the current version — they override the vault outline.
+  try {
+    const { data: docs } = await ctx.sb.from('sop_docs').select('dept, title, roles, body, video_url, updated_at').eq('status', 'published')
+    if (docs?.length) system.push({ type: 'text', text: `CURRENT SOPs WRITTEN IN THE APP (these are the live versions — prefer them over the vault outline with the same name):` + docs.map(d => `\n\n===== ${d.dept} / ${d.title} (for: ${(d.roles || []).join(', ') || 'everyone'}${d.video_url ? '; has a training video in the app' : ''}) =====\n${d.body || ''}`).join('') })
+  } catch {}
 
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {

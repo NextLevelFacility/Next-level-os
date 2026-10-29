@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { noteBySlug, render, backlinksOf } from '../lib/vault'
-import { supabase, isManager } from '../lib/supabase'
+import { supabase, isManager, isDirector, ROLES } from '../lib/supabase'
 import { useAuth } from '../lib/auth.jsx'
+import { useSops, STATUS } from '../lib/sops'
 
 export default function Note() {
   const { slug } = useParams()
@@ -10,6 +11,8 @@ export default function Note() {
   const note = noteBySlug(slug)
   const [readAt, setReadAt] = useState(null)
   const [readers, setReaders] = useState([])
+  const { sops } = useSops()
+  const mine = note ? sops.filter(x => x.dept === note.title) : []
 
   useEffect(() => {
     if (!note) return
@@ -35,6 +38,17 @@ export default function Note() {
         {note.meta.status && <span className={`pill ${note.meta.status === 'approved' ? 'good' : 'gold'}`}>{note.meta.status}</span>}
         {note.meta.owner && <span className="pill">owner · {note.meta.owner}</span>}
       </div>
+      {mine.length > 0 && (
+        <div className="card accent">
+          <div className="row between"><h2 style={{ margin: 0 }}>The SOPs in this area</h2>{isDirector(role) && <Link to="/sops" className="small">SOP Studio</Link>}</div>
+          <p className="small muted">{mine.filter(x => x.status === 'published').length} live · {mine.filter(x => x.body && x.status !== 'published').length} in draft · {mine.filter(x => !x.body).length} still outlines</p>
+          <ul className="list">
+            {mine.filter(x => x.status === 'published' || isDirector(role)).map(x => { const [label, tone] = STATUS[x.status] || STATUS.outline; return (
+              <li key={x.key}><span className="pill" style={{ minWidth: 28, justifyContent: 'center' }}>{x.n < 99 ? x.n : '+'}</span><span className="grow"><div className="title">{x.title}</div><div className="row wrap small" style={{ gap: 6 }}><span className={`pill ${tone}`}>{label}</span>{x.video_url && <span className="pill pink">▶ video</span>}<span className="muted">{x.roles.map(r => ROLES[r]).join(' · ')}</span></div></span><Link className="btn ghost small" to={`/sop/${encodeURIComponent(x.key)}`}>Open</Link></li>
+            ) })}
+          </ul>
+        </div>
+      )}
       <article className="md"><h1>{note.title}</h1><div dangerouslySetInnerHTML={{ __html: html }} /></article>
       <hr className="hr" />
       {readAt
