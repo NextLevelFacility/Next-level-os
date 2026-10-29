@@ -1,7 +1,7 @@
 // "Ask Next Level" — the in-app assistant. Answers from the Playbook (SOPs, standards, beliefs) for any signed-in staff member.
 // Needs ANTHROPIC_API_KEY in Netlify env vars. Optional ANTHROPIC_MODEL.
-const { requireUser, json } = require('./_auth')
-const vault = require('./vault-content.json')
+import { requireUser, json } from './_auth.js'
+import vault from './vault-content.json'
 
 const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5'
 
@@ -9,7 +9,7 @@ function playbookText() {
   return vault.docs.map(d => `\n\n===== ${d.path} =====\n${d.body}`).join('')
 }
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' })
   const ctx = await requireUser(event)
   if (!ctx) return json(401, { error: 'Sign in required' })

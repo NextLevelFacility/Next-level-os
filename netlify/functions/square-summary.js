@@ -1,6 +1,6 @@
 // Live sales from Square: today / last 7 days / month to date, memberships (subscriptions), and clinic sign-ups by keyword.
 // Needs SQUARE_ACCESS_TOKEN in Netlify env vars (Square Developer → your app → Production → Access token). Optional: SQUARE_LOCATION_ID.
-const { requireUser, json } = require('./_auth')
+import { requireUser, json } from './_auth.js'
 
 const SQ = 'https://connect.squareup.com/v2'
 const headers = () => ({ Authorization: `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`, 'Content-Type': 'application/json', 'Square-Version': '2025-01-23' })
@@ -60,7 +60,7 @@ function tzMidnight(y, m, d, ref = new Date()) {
   return new Date(Date.UTC(y, m - 1, d) - offset)
 }
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   const ctx = await requireUser(event)
   if (!ctx) return json(401, { error: 'Sign in required' })
   if (!process.env.SQUARE_ACCESS_TOKEN) return json(200, { connected: false, hint: 'Add SQUARE_ACCESS_TOKEN in Netlify → Environment variables.' })

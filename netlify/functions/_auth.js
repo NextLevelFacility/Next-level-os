@@ -1,7 +1,7 @@
 // Verifies the caller is a signed-in Next Level OS user. Returns the user or null.
-const { createClient } = require('@supabase/supabase-js')
+import { createClient } from '@supabase/supabase-js'
 
-async function requireUser(event) {
+export async function requireUser(event) {
   const auth = event.headers.authorization || event.headers.Authorization || ''
   const token = auth.replace(/^Bearer\s+/i, '')
   if (!token) return null
@@ -15,6 +15,5 @@ async function requireUser(event) {
   return { user: data.user, profile, sb }
 }
 
-const json = (status, body) => ({ statusCode: status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }, body: JSON.stringify(body) })
+export const json = (status, body) => ({ statusCode: status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }, body: JSON.stringify(body) })
 
-module.exports = { requireUser, json }

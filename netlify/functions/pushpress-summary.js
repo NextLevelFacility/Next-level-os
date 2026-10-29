@@ -1,6 +1,6 @@
 // Members, plans and cancellations from PushPress.
 // Needs PUSHPRESS_API_KEY in Netlify env vars. Optional: PUSHPRESS_COMPANY_ID (if the key covers several gyms), PUSHPRESS_API_BASE.
-const { requireUser, json } = require('./_auth')
+import { requireUser, json } from './_auth.js'
 
 const BASE = (process.env.PUSHPRESS_API_BASE || 'https://api.pushpress.com/v3').replace(/\/$/, '')
 const PAGE = 100
@@ -54,7 +54,7 @@ const planOf = (o) => {
 }
 const since = () => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d }
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   const ctx = await requireUser(event)
   if (!ctx) return json(401, { error: 'Sign in required' })
   if (!process.env.PUSHPRESS_API_KEY) return json(200, { connected: false, hint: 'Add PUSHPRESS_API_KEY in Netlify → Environment variables.' })
