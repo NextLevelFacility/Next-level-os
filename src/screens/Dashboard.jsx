@@ -104,6 +104,17 @@ export default function Dashboard() {
             {pp.paused != null && <Stat label="Paused" value={pp.paused} sub="members on hold · not counted as active" />}
             {pp.ex_members != null && <Stat label="Ex-members" value={pp.ex_members} sub="win-back list" />}
           </div>
+          {pp.revenue && (
+            <div className="card">
+              <div className="row between wrap"><h3 style={{ marginTop: 0 }}>Membership revenue · PushPress</h3><span className="small muted">active plans × monthly price</span></div>
+              <div className="grid">
+                <Stat label="Monthly recurring" value={money(pp.revenue.mrr)} tone="gold" sub={`${pp.revenue.pricedPlans} priced plans${pp.revenue.unpricedPlans ? ` · ${pp.revenue.unpricedPlans} without a price` : ''}`} />
+                <Stat label="Billed so far this month" value={money(pp.revenue.chargedMonth)} sub="plans charged since the 1st" />
+                <Stat label="Still due this month" value={money(pp.revenue.dueRest)} sub="next charge dates ahead" />
+              </div>
+              {role === 'owner' && <PlanPrices plans={pp.revenue.plansList} onSaved={() => callFn('pushpress-summary', { force: true }).then(setPp)} />}
+            </div>
+          )}
           {pp.plans?.length > 0 && <div className="card"><h3>Active plans · by name</h3><ul className="list">{pp.plans.map(([n, c]) => <li key={n}><span className="grow">{n}</span><b>{c}</b></li>)}</ul></div>}
           {(pp.alert_list?.length > 0 || pp.leaving?.length > 0 || pp.cancelled?.length > 0) && (
             <div className="card">
@@ -212,4 +223,38 @@ export default function Dashboard() {
 
 function Stat({ label, value, tone, sub }) {
   return <div className="stat"><div className="label">{label}</div><div className={`value ${tone || ''}`}>{value}</div>{sub && <div className="small muted">{sub}</div>}</div>
+}
+
+// Owner sets what each PushPress plan bills per month. Guessed from the plan name where it says 1x/2x/3x per week.
+function PlanPrices({ plans, onSaved }) {
+  const [open, setOpen] = useState(false)
+  const [vals, setVals] = useState({})
+  const [saving, setSaving] = useState(false)
+  if (!plans?.length) return null
+  const missing = plans.filter(p => p.price == null && p.active > 0).length
+  async function save() {
+    setSaving(true)
+    const rows = Object.entries(vals).map(([plan_id, v]) => ({ plan_id, monthly_price: v === '' ? null : Number(v), updated_at: new Date().toISOString() }))
+    for (const r of rows) await supabase.from('plan_prices').update({ monthly_price: r.monthly_price, updated_at: r.updated_at }).eq('plan_id', r.plan_id)
+    setSaving(false); setVals({}); setOpen(false); onSaved?.()
+  }
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button className="btn ghost small" onClick={() => setOpen(!open)}>{open ? 'Close' : `Plan prices${missing ? ` · ${missing} to fill in` : ''}`}</button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <ul className="list">
+            {plans.map(p => (
+              <li key={p.id}>
+                <span className="grow"><div className="small" style={{ fontWeight: 500 }}>{p.name}</div><div className="small muted">{p.active} active{p.category ? ` · ${p.category}` : ''}</div></span>
+                <span className="small muted">$</span>
+                <input className="input" type="number" inputMode="decimal" placeholder="/ month" style={{ width: 110, minHeight: 34, padding: '5px 8px' }} value={vals[p.id] ?? (p.price ?? '')} onChange={e => setVals({ ...vals, [p.id]: e.target.value })} />
+              </li>
+            ))}
+          </ul>
+          <button className="btn small" disabled={saving || !Object.keys(vals).length} onClick={save}>{saving ? 'Saving…' : 'Save prices'}</button>
+        </div>
+      )}
+    </div>
+  )
 }

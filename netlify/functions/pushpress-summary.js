@@ -110,7 +110,7 @@ export const handler = async (event) => {
   let body = {}
   try { body = JSON.parse(event.body || '{}') } catch {}
   if (body.debug && ctx.profile && ['owner', 'operator'].includes(ctx.profile.role)) return json(200, await debug())
-  return json(200, await cached(ctx.sb, 'pushpress', () => summary(), { force: Boolean(body.force) }))
+  return json(200, await cached(ctx.sb, 'pushpress', () => summary(ctx.sb), { force: Boolean(body.force) }))
 }
 
 // Owner-only: which money endpoints this PushPress key can see (shape only, no values).
@@ -136,7 +136,7 @@ async function debug() {
   return out
 }
 
-async function summary() {
+async function summary(sb) {
   try {
     // 0) Can this key talk to PushPress at all?
     const pr = await probe()
@@ -165,6 +165,17 @@ async function summary() {
       try { const r = await fetch(`${BASE}/plans/${id}`, { headers: headers() }); const d = r.ok ? await r.json() : null; const pl = d?.data || d; planCache.set(id, pl ? { name: pl.name || pl.title || null, category: pl.category?.name || null } : null) } catch { planCache.set(id, null) }
     }))
     const planLabel = (e) => planCache.get(e.planId)?.name || planOf(e) || (e.planId ? `Plan ${String(e.planId).slice(-6)}` : 'Member')
+
+    // Plan prices live in the app (PushPress has none). Seed new plans with a guess from the name (3x/2x/1x per week), the Owner edits the rest.
+    const guessPrice = (name = '') => { const m = name.match(/(\d)\s*x\s*\/?\s*week/i); if (!m) return null; return { 3: 720, 2: 560, 1: 360, 4: 880, 5: 1500 }[Number(m[1])] ?? null }
+    let prices = {}
+    try {
+      const { data: rows } = await sb.from('plan_prices').select('plan_id, name, monthly_price')
+      for (const r of rows || []) prices[r.plan_id] = r
+      const missing = [...planCache.entries()].filter(([id, pl]) => pl && !prices[id]).map(([id, pl]) => ({ plan_id: id, name: pl.name, category: pl.category, monthly_price: guessPrice(pl.name) }))
+      if (missing.length) { const { error } = await sb.from('plan_prices').upsert(missing, { onConflict: 'plan_id' }); if (!error) for (const m of missing) prices[m.plan_id] = m }
+    } catch {}
+    const priceOf = (e) => { const v = prices[e.planId]?.monthly_price; return v == null || v === '' ? null : Number(v) }
     const enrName = (e) => nameOf(byId.get(e.customerId) || e.customer || e) || 'Member'
     const endOf = (e) => e.endDate ? new Date(e.endDate) : dateOf(e)
     const monthStart = since(), now = new Date()
@@ -196,6 +207,14 @@ async function summary() {
       active_enrollments: running.length, paused: pausedIds.size, paused_plans: paused.length, alerts: alertIds.size,
       alert_list: alertList.slice(0, 20),
       plans: Object.entries(plans).sort((a, b) => b[1] - a[1]).slice(0, 12),
+      revenue: (() => {
+        const priced = running.filter(e => priceOf(e) != null)
+        const mrr = priced.reduce((a, e) => a + priceOf(e), 0)
+        const unpriced = [...new Set(running.filter(e => priceOf(e) == null).map(e => planLabel(e)))]
+        const chargedMonth = running.filter(e => e.lastCharge && new Date(e.lastCharge) >= monthStart && priceOf(e) != null).reduce((a, e) => a + priceOf(e), 0)
+        const dueRest = running.filter(e => e.nextCharge && new Date(e.nextCharge) >= now && new Date(e.nextCharge) <= new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59) && priceOf(e) != null).reduce((a, e) => a + priceOf(e), 0)
+        return { mrr, chargedMonth, dueRest, pricedPlans: priced.length, unpricedPlans: running.length - priced.length, unpriced, plansList: [...planCache.entries()].filter(([, pl]) => pl).map(([id, pl]) => ({ id, name: pl.name, category: pl.category, price: prices[id]?.monthly_price ?? null, active: running.filter(e => e.planId === id).length })).sort((a, b) => b.active - a.active) }
+      })(),
       cancellations_month: cancelled.length,
       cancelled: cancelled.sort((a, b) => (b.at || '').localeCompare(a.at || '')).slice(0, 50),
       pending_cancel: leaving.length,
