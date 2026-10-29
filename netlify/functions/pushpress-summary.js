@@ -1,6 +1,7 @@
 // Members, plans and cancellations from PushPress.
 // Needs PUSHPRESS_API_KEY in Netlify env vars. Optional: PUSHPRESS_COMPANY_ID (if the key covers several gyms), PUSHPRESS_API_BASE.
 import { requireUser, json } from './_auth.js'
+import { cached } from './_cache.js'
 
 const BASE = (process.env.PUSHPRESS_API_BASE || 'https://api.pushpress.com/v3').replace(/\/$/, '')
 const PAGE = 100
@@ -53,7 +54,6 @@ function describe(d, depth = 0) {
 }
 const rawShapes = {}
 const planCache = new Map()   // planId → { name, category }, kept while the function instance is warm
-let memo = { at: 0, body: null }   // last good answer, reused for 2 minutes so every screen doesn't re-pull 500 people
 
 // Pull every page of a list endpoint. Returns { list, status } — status is the first HTTP status so callers can tell 404 (no such endpoint) from 401.
 async function listAll(path, params = {}) {
@@ -107,13 +107,17 @@ export const handler = async (event) => {
   const ctx = await requireUser(event)
   if (!ctx) return json(401, { error: 'Sign in required' })
   if (!KEY()) return json(200, { connected: false, hint: 'Add PUSHPRESS_API_KEY in Netlify → Environment variables.' })
+  let body = {}
+  try { body = JSON.parse(event.body || '{}') } catch {}
+  return json(200, await cached(ctx.sb, 'pushpress', () => summary(), { force: Boolean(body.force) }))
+}
 
-  if (memo.body && Date.now() - memo.at < 120000) return json(200, { ...memo.body, cached: true })
+async function summary() {
   try {
     // 0) Can this key talk to PushPress at all?
     const pr = await probe()
     if (!pr.ok) {
-      return json(200, { connected: true, error: `PushPress rejected the API key (${pr.tried.join(', ')}). In PushPress go to Settings → Security & Access → API keys, create a key, and paste the whole key into Netlify as PUSHPRESS_API_KEY (no spaces). If your key covers more than one gym, also add PUSHPRESS_COMPANY_ID.` })
+      return { connected: true, error: `PushPress rejected the API key (${pr.tried.join(', ')}). In PushPress go to Settings → Security & Access → API keys, create a key, and paste the whole key into Netlify as PUSHPRESS_API_KEY (no spaces). If your key covers more than one gym, also add PUSHPRESS_COMPANY_ID.` }
     }
 
     // 1) Customers. PushPress tags each person with a role: member, lead, non-member, ex-member, coach, admin.
@@ -160,7 +164,7 @@ export const handler = async (event) => {
     const alertIds = new Set(alerts.map(e => e.customerId).filter(Boolean))
     const active = enrollments.length ? activeIds.size : (members.length || null)
 
-    memo = { at: Date.now(), body: {
+    return {
       connected: true,
       company: pr.company?.name || pr.company?.data?.name || null,
       active, total: customers.length, leads, ex_members: exMembers, cancelled_total: exMembers || canceled.length,
@@ -178,9 +182,8 @@ export const handler = async (event) => {
         enrollments: enrollments.length, enrollmentStatus: enrStatus, plansKnown: [...planCache.values()].filter(Boolean).length, enrollErr,
         raw: rawShapes,
       },
-    } }
-    return json(200, memo.body)
+    }
   } catch (e) {
-    return json(200, { connected: true, error: String(e.message || e), shape: { auth: authStyle?.[0], raw: rawShapes } })
+    return { connected: true, error: String(e.message || e), shape: { auth: authStyle?.[0], raw: rawShapes } }
   }
 }

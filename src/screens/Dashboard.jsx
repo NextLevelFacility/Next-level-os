@@ -15,10 +15,11 @@ export default function Dashboard() {
   const [d, setD] = useState(null)
   const [sq, setSq] = useState(null)
   const [pp, setPp] = useState(null)
+  const [ghl, setGhl] = useState(null)
   const [ret, setRet] = useState(null)
   const [comp, setComp] = useState(null)
 
-  useEffect(() => { callFn('square-summary').then(setSq); callFn('pushpress-summary').then(setPp); loadComp().then(async c => { setComp(c); setRet(await loadRetention(c, { allLocations: true })) }) }, [])
+  useEffect(() => { callFn('square-summary').then(setSq); callFn('pushpress-summary').then(setPp); callFn('ghl-summary').then(setGhl); loadComp().then(async c => { setComp(c); setRet(await loadRetention(c, { allLocations: true })) }) }, [])
   useEffect(() => {
     (async () => {
       const scope = q => loc === 'all' ? q : q.eq('location_id', loc)
@@ -111,6 +112,28 @@ export default function Dashboard() {
               {pp.cancelled?.length > 0 && <><h3 style={{ marginTop: 12 }}>Cancelled this month</h3><ul className="list">{pp.cancelled.slice(0, 10).map((c, i) => <li key={'c' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="small muted">{c.at ? new Date(c.at).toLocaleDateString() : ''}</span></li>)}</ul></>}
             </div>
           )}
+        </>
+      )}
+
+      <h2>Leads · GoHighLevel</h2>
+      {!ghl ? <p className="muted">Loading GoHighLevel…</p> : !ghl.connected ? (
+        <div className="card"><p className="muted" style={{ margin: 0 }}>GoHighLevel isn't connected yet. Add <code>GHL_API_KEY</code> and <code>GHL_LOCATION_ID</code> in Netlify → Environment variables to see new leads, the pipeline and booked evaluations here.</p></div>
+      ) : ghl.error ? <div className="card"><p className="flag" style={{ margin: 0 }}>GoHighLevel: {ghl.error}</p></div> : (
+        <>
+          <div className="grid">
+            <Stat label="New leads today" value={ghl.leads.today} tone="gold" />
+            <Stat label="New leads · 7 days" value={ghl.leads.week} />
+            <Stat label="New leads · month" value={ghl.leads.month} />
+            <Stat label="Open opportunities" value={ghl.pipeline.open} />
+            <Stat label="Won this month" value={ghl.pipeline.wonMonth} sub={ghl.pipeline.wonValue ? money(ghl.pipeline.wonValue) : ''} tone="gold" />
+            <Stat label="Evals today" value={ghl.appointments.today} sub={`${ghl.appointments.upcoming7} booked next 7 days`} />
+            <Stat label="Showed · 7 days" value={ghl.appointments.showed7} sub={`${ghl.appointments.noshow7} no-shows`} />
+          </div>
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+            {ghl.pipeline.byStage?.length > 0 && <div className="card" style={{ margin: 0 }}><h3 style={{ marginTop: 0 }}>Pipeline by stage</h3><ul className="list">{ghl.pipeline.byStage.map(([n, c]) => <li key={n}><span className="grow small">{n}</span><b>{c}</b></li>)}</ul></div>}
+            {ghl.leads.sources?.length > 0 && <div className="card" style={{ margin: 0 }}><h3 style={{ marginTop: 0 }}>Lead sources · month</h3><ul className="list">{ghl.leads.sources.map(([n, c]) => <li key={n}><span className="grow small">{n}</span><b>{c}</b></li>)}</ul></div>}
+          </div>
+          {ghl.appointments.todayList?.length > 0 && <div className="card" style={{ marginTop: 8 }}><h3 style={{ marginTop: 0 }}>Today's appointments</h3><ul className="list">{ghl.appointments.todayList.map((a, i) => <li key={i}><span className="pill">{new Date(a.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span><span className="grow small">{a.title}{a.calendar ? <span className="muted"> · {a.calendar}</span> : null}</span>{a.status && <span className={`pill ${a.status === 'showed' ? 'good' : /no/.test(a.status) ? 'bad' : ''}`}>{a.status}</span>}</li>)}</ul></div>}
         </>
       )}
 

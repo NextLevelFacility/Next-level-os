@@ -1,62 +1,64 @@
-// Live sales from Square: today / last 7 days / month to date, memberships (subscriptions), and clinic sign-ups by keyword.
+// Live sales from Square: today / last 7 days / month to date, by category (field rentals, birthday parties, concession, training, clinics).
 // Needs SQUARE_ACCESS_TOKEN in Netlify env vars (Square Developer → your app → Production → Access token). Optional: SQUARE_LOCATION_ID.
 import { requireUser, json } from './_auth.js'
+import { cached } from './_cache.js'
 
 const SQ = 'https://connect.squareup.com/v2'
 const TOKEN = () => (process.env.SQUARE_ACCESS_TOKEN || '').trim()
 const headers = () => ({ Authorization: `Bearer ${TOKEN()}`, 'Content-Type': 'application/json', 'Square-Version': '2025-01-23' })
-let memo = { at: 0, body: null }   // last good answer, reused for 2 minutes (90 days of payments is a slow pull)
 
-// When Square says "could not be authorized", work out why without exposing the token.
-async function diagnoseAuth() {
-  const ping = async (host) => { try { const r = await fetch(`${host}/v2/locations`, { headers: headers() }); const d = await r.json(); return { ok: r.ok && !d.errors, status: r.status, detail: d.errors?.[0]?.detail || '' } } catch (e) { return { ok: false, status: 0, detail: String(e.message) } } }
-  const prod = await ping('https://connect.squareup.com')
-  if (prod.ok) return 'The token works but cannot read payments. In Square Developer → your app → Permissions (or OAuth), make sure PAYMENTS_READ, ORDERS_READ and SUBSCRIPTIONS_READ are allowed.'
-  const sandbox = await ping('https://connect.squareupsandbox.com')
-  if (sandbox.ok) return 'This is a SANDBOX token, so it only sees test data. In Square Developer → your app → Credentials, switch the toggle at the top from Sandbox to Production, copy the Production Access Token, and replace SQUARE_ACCESS_TOKEN in Netlify.'
-  return `Square rejected the token (${prod.status}${prod.detail ? ': ' + prod.detail : ''}). Re-copy the Production Access Token from Square Developer → your app → Credentials and paste the whole thing into Netlify as SQUARE_ACCESS_TOKEN, no spaces.`
+async function sq(path, init) {
+  const r = await fetch(`${SQ}${path}`, { headers: headers(), ...init })
+  const d = await r.json().catch(() => ({}))
+  if (d.errors) { const e = new Error(d.errors.map(e => e.detail || e.code).join('; ')); e.code = d.errors[0]?.code; throw e }
+  return d
 }
 
-async function listPayments(begin, end) {
+let locCache = null
+async function locationIds() {
+  if (process.env.SQUARE_LOCATION_ID) return [process.env.SQUARE_LOCATION_ID.trim()]
+  if (locCache) return locCache
+  const d = await sq('/locations')
+  locCache = (d.locations || []).filter(l => l.status !== 'INACTIVE').map(l => l.id)
+  return locCache
+}
+
+// Completed orders in a window — one call per 500 orders, line items included (far faster than payments + order lookups).
+async function completedOrders(startAt, endAt) {
+  const ids = await locationIds()
   let cursor, out = []
   do {
-    const qs = new URLSearchParams({ begin_time: begin, end_time: end, sort_order: 'ASC', limit: '100' })
-    if (process.env.SQUARE_LOCATION_ID) qs.set('location_id', process.env.SQUARE_LOCATION_ID)
-    if (cursor) qs.set('cursor', cursor)
-    const r = await fetch(`${SQ}/payments?${qs}`, { headers: headers() })
-    const d = await r.json()
-    if (d.errors) throw new Error(d.errors.map(e => e.detail || e.code).join('; '))
-    out = out.concat(d.payments || []); cursor = d.cursor
-  } while (cursor)
-  return out.filter(p => p.status === 'COMPLETED')
+    const body = { location_ids: ids.slice(0, 10), limit: 500, return_entries: false, query: { filter: { date_time_filter: { closed_at: { start_at: startAt, end_at: endAt } }, state_filter: { states: ['COMPLETED'] } }, sort: { sort_field: 'CLOSED_AT', sort_order: 'DESC' } } }
+    if (cursor) body.cursor = cursor
+    const d = await sq('/orders/search', { method: 'POST', body: JSON.stringify(body) })
+    out = out.concat(d.orders || []); cursor = d.cursor
+  } while (cursor && out.length < 20000)
+  return out
 }
-async function listOrders(ids) {
-  if (!ids.length) return {}
-  const orders = {}
-  for (let i = 0; i < ids.length; i += 100) {
-    const r = await fetch(`${SQ}/orders/batch-retrieve`, { method: 'POST', headers: headers(), body: JSON.stringify({ order_ids: ids.slice(i, i + 100) }) })
-    const d = await r.json()
-    for (const o of d.orders || []) orders[o.id] = o
-  }
-  return orders
-}
-async function activeSubscriptions() {
+
+async function subscriptions() {
   try {
     let cursor, subs = []
     do {
       const body = { limit: 200 }
-      if (process.env.SQUARE_LOCATION_ID) body.query = { filter: { location_ids: [process.env.SQUARE_LOCATION_ID] } }
+      if (process.env.SQUARE_LOCATION_ID) body.query = { filter: { location_ids: [process.env.SQUARE_LOCATION_ID.trim()] } }
       if (cursor) body.cursor = cursor
-      const r = await fetch(`${SQ}/subscriptions/search`, { method: 'POST', headers: headers(), body: JSON.stringify(body) })
-      const d = await r.json()
-      if (d.errors) return { active: null, total: null, error: d.errors.map(e => e.detail || e.code).join('; ') }
+      const d = await sq('/subscriptions/search', { method: 'POST', body: JSON.stringify(body) })
       subs = subs.concat(d.subscriptions || []); cursor = d.cursor
     } while (cursor)
     return { active: subs.filter(s => s.status === 'ACTIVE').length, paused: subs.filter(s => s.status === 'PAUSED').length, total: subs.length }
   } catch { return { active: null, total: null } }
 }
 
-const sum = (ps) => ps.reduce((a, p) => a + (p.amount_money?.amount || 0), 0) / 100
+// When Square says "could not be authorized", work out why without exposing the token.
+async function diagnoseAuth() {
+  const ping = async (host) => { try { const r = await fetch(`${host}/v2/locations`, { headers: headers() }); const d = await r.json(); return { ok: r.ok && !d.errors, status: r.status, detail: d.errors?.[0]?.detail || '' } } catch (e) { return { ok: false, status: 0, detail: String(e.message) } } }
+  const prod = await ping('https://connect.squareup.com')
+  if (prod.ok) return 'The token works but cannot read orders. In Square Developer → your app, make sure ORDERS_READ, PAYMENTS_READ, MERCHANT_PROFILE_READ and SUBSCRIPTIONS_READ are allowed.'
+  const sandbox = await ping('https://connect.squareupsandbox.com')
+  if (sandbox.ok) return 'This is a SANDBOX token, so it only sees test data. In Square Developer → your app → Credentials, switch the toggle at the top from Sandbox to Production, copy the Production Access Token, and replace SQUARE_ACCESS_TOKEN in Netlify.'
+  return `Square rejected the token (${prod.status}${prod.detail ? ': ' + prod.detail : ''}). Re-copy the Production Access Token from Square Developer → your app → Credentials and paste the whole thing into Netlify as SQUARE_ACCESS_TOKEN, no spaces.`
+}
 
 // Netlify functions run in UTC; the business day is Miami time.
 const TZ = process.env.BUSINESS_TZ || 'America/New_York'
@@ -65,83 +67,89 @@ function tzParts(d) {
   const get = t => Number(parts.find(p => p.type === t)?.value || 0)
   return { y: get('year'), m: get('month'), d: get('day'), h: get('hour') % 24, mi: get('minute'), s: get('second') }
 }
-// Midnight (in TZ) of the given local calendar day, as a real Date.
 function tzMidnight(y, m, d, ref = new Date()) {
   const p = tzParts(ref)
-  const offset = Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - ref.getTime()   // TZ offset from UTC, in ms
+  const offset = Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - ref.getTime()
   return new Date(Date.UTC(y, m - 1, d) - offset)
+}
+
+// What Square actually sells at Next Level. Memberships bill through PushPress.
+const CATS = [
+  ['Field rentals', /field\s*rental|plei|pitch rental|rental \(/i],
+  ['Birthday parties', /birthday|bday|party/i],
+  ['Boot rentals', /boot/i],
+  ['Clinics & camps', /clinic|camp|blueprint|thanksgiving|winter|spring break|summer/i],
+  ['Training', /x\s*\/\s*week|session pack|sessions?\b|semi|private|program|rehab|paid in full|first month|homeschool|speed|training|membership|member/i],
+]
+const catOf = (name) => (CATS.find(([, re]) => re.test(name || '')) || ['Concession & other'])[0]
+const emptyCats = () => Object.fromEntries([...CATS.map(c => c[0]), 'Concession & other'].map(c => [c, { amount: 0, count: 0 }]))
+const orderTotal = (o) => ((o.total_money?.amount || 0) - (o.return_amounts?.total_money?.amount || 0)) / 100
+
+function breakdown(orders) {
+  const cats = emptyCats(), items = {}
+  let sales = 0
+  for (const o of orders) {
+    sales += orderTotal(o)
+    const lis = o.line_items || []
+    if (!lis.length) { cats['Concession & other'].amount += orderTotal(o); cats['Concession & other'].count += 1; continue }
+    for (const li of lis) {
+      const name = li.name || 'Other', amt = (li.total_money?.amount || 0) / 100, qty = Number(li.quantity || 1)
+      items[name] = (items[name] || 0) + amt
+      const c = cats[catOf(name)]; c.amount += amt; c.count += qty
+    }
+  }
+  return { sales, count: orders.length, cats, items: Object.entries(items).sort((a, b) => b[1] - a[1]).slice(0, 15) }
+}
+
+async function summary({ days = 0 } = {}) {
+  const now = new Date()
+  const t = tzParts(now)
+  const startToday = tzMidnight(t.y, t.m, t.d, now)
+  const start7 = new Date(startToday.getTime() - 6 * 864e5)
+  const startMonth = tzMidnight(t.y, t.m, 1, now)
+  const windowStart = new Date(Math.min(startMonth.getTime(), start7.getTime(), days ? startToday.getTime() - days * 864e5 : Infinity))
+  const orders = await completedOrders(windowStart.toISOString(), now.toISOString())
+  const closedAt = (o) => new Date(o.closed_at || o.created_at)
+  const todayO = orders.filter(o => closedAt(o) >= startToday), weekO = orders.filter(o => closedAt(o) >= start7), monthO = orders.filter(o => closedAt(o) >= startMonth)
+  const todayB = breakdown(todayO), weekB = breakdown(weekO), monthB = breakdown(monthO)
+
+  // Every line item in the window, for clinic sign-up matching by keyword
+  const lineItems = {}
+  for (const o of orders) {
+    for (const li of o.line_items || []) {
+      const k = li.name || 'Other'
+      lineItems[k] = lineItems[k] || { count: 0, amount: 0, paymentIds: [] }
+      lineItems[k].count += Number(li.quantity || 1)
+      lineItems[k].amount += (li.total_money?.amount || 0) / 100
+      lineItems[k].paymentIds.push({ id: o.tenders?.[0]?.payment_id || o.id, at: o.closed_at || o.created_at, note: o.note || '', buyer: o.customer_id || '' })
+    }
+  }
+  const subs = await subscriptions()
+  return {
+    connected: true,
+    today: { sales: todayB.sales, count: todayB.count, cats: todayB.cats },
+    week: { sales: weekB.sales, count: weekB.count, cats: weekB.cats },
+    month: { sales: monthB.sales, count: monthB.count, cats: monthB.cats, memberships: monthB.cats['Training'].amount },
+    items: monthB.items,
+    lineItems,
+    windowDays: Math.round((now - windowStart) / 864e5),
+    subscriptions: subs,
+    asOf: now.toISOString(),
+  }
 }
 
 export const handler = async (event) => {
   const ctx = await requireUser(event)
   if (!ctx) return json(401, { error: 'Sign in required' })
   if (!TOKEN()) return json(200, { connected: false, hint: 'Add SQUARE_ACCESS_TOKEN in Netlify → Environment variables.' })
-  if (memo.body && Date.now() - memo.at < 120000) return json(200, { ...memo.body, cached: true })
-  try {
-    const now = new Date()
-    const t = tzParts(now)
-    const startToday = tzMidnight(t.y, t.m, t.d, now)
-    const start7 = new Date(startToday.getTime() - 6 * 864e5)
-    const startMonth = tzMidnight(t.y, t.m, 1, now)
-    const start90 = new Date(startToday.getTime() - 90 * 864e5)
-    const payments = await listPayments(start90.toISOString(), now.toISOString())
-    const orders = await listOrders([...new Set(payments.map(p => p.order_id).filter(Boolean))])
-
-    const inRange = (p, from) => new Date(p.created_at) >= from
-    const todayP = payments.filter(p => inRange(p, startToday)), weekP = payments.filter(p => inRange(p, start7)), monthP = payments.filter(p => inRange(p, startMonth))
-
-    // What Square actually sells at Next Level: rentals, parties, concession, training packs, clinics. Memberships bill through PushPress.
-    const CATS = [
-      ['Field rentals', /field\s*rental|plei|pitch rental|rental \(/i],
-      ['Birthday parties', /birthday|bday|party/i],
-      ['Boot rentals', /boot/i],
-      ['Clinics & camps', /clinic|camp|blueprint|thanksgiving|winter|spring break|summer/i],
-      ['Training', /x\s*\/\s*week|session pack|sessions?\b|semi|private|program|rehab|paid in full|first month|homeschool|speed|training|membership|member/i],
-    ]
-    const catOf = (name) => (CATS.find(([, re]) => re.test(name || '')) || ['Concession & other'])[0]
-    const emptyCats = () => Object.fromEntries([...CATS.map(c => c[0]), 'Concession & other'].map(c => [c, { amount: 0, count: 0 }]))
-    const breakdown = (ps) => {
-      const cats = emptyCats(), items = {}
-      for (const p of ps) {
-        const o = orders[p.order_id]
-        const lis = o?.line_items || []
-        if (!lis.length) { cats['Concession & other'].amount += (p.amount_money?.amount || 0) / 100; cats['Concession & other'].count += 1; continue }
-        for (const li of lis) {
-          const name = li.name || 'Other', amt = (li.total_money?.amount || 0) / 100, qty = Number(li.quantity || 1)
-          items[name] = (items[name] || 0) + amt
-          const c = cats[catOf(name)]; c.amount += amt; c.count += qty
-        }
-      }
-      return { cats, items: Object.entries(items).sort((a, b) => b[1] - a[1]).slice(0, 15) }
+  let body = {}
+  try { body = JSON.parse(event.body || '{}') } catch {}
+  const run = async () => {
+    try { return await summary({ days: Number(body.days) || 0 }) } catch (e) {
+      const msg = String(e.message || e)
+      return { connected: true, error: /authoriz|UNAUTHORIZED|ACCESS_TOKEN|FORBIDDEN/i.test(msg) ? await diagnoseAuth() : msg }
     }
-    const monthB = breakdown(monthP), weekB = breakdown(weekP), todayB = breakdown(todayP)
-
-    // Every line item sold in the last 90 days, for clinic sign-up matching by keyword
-    const clinics = {}
-    for (const p of payments) {
-      const o = orders[p.order_id]
-      for (const li of o?.line_items || []) {
-        clinics[li.name] = clinics[li.name] || { count: 0, amount: 0, paymentIds: [] }
-        clinics[li.name].count += Number(li.quantity || 1)
-        clinics[li.name].amount += (li.total_money?.amount || 0) / 100
-        clinics[li.name].paymentIds.push({ id: p.id, at: p.created_at, note: p.note || '', buyer: p.buyer_email_address || '' })
-      }
-    }
-    const subs = await activeSubscriptions()
-    memo = { at: Date.now(), body: {
-      connected: true,
-      today: { sales: sum(todayP), count: todayP.length, cats: todayB.cats },
-      week: { sales: sum(weekP), count: weekP.length, cats: weekB.cats },
-      month: { sales: sum(monthP), count: monthP.length, cats: monthB.cats, memberships: monthB.cats['Training'].amount },
-      items: monthB.items,
-      lineItems: clinics,
-      subscriptions: subs,
-      asOf: now.toISOString(),
-    } }
-    return json(200, memo.body)
-  } catch (e) {
-    const msg = String(e.message || e)
-    const error = /authoriz|UNAUTHORIZED|ACCESS_TOKEN/i.test(msg) ? await diagnoseAuth() : msg
-    return json(200, { connected: true, error })
   }
+  if (body.days) return json(200, await run())              // the 90-day clinic pull is on demand, never cached
+  return json(200, await cached(ctx.sb, 'square', run, { force: Boolean(body.force) }))
 }

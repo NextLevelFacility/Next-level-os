@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth.jsx'
 import { supabase, today, PROGRAMS, fmtTime } from '../lib/supabase'
 import { money } from '../lib/api'
 import Goals from '../components/Goals.jsx'
+import LiveNumbers from '../components/LiveNumbers.jsx'
 import { loadComp, loadRetention, commissionFor, isBonusPerson, monthStart, pct } from '../lib/comp'
 
 // The sales board: goals on top, then one-tap logging. Every log bumps the matching goal.
@@ -68,9 +69,10 @@ export default function Sales() {
   return (
     <>
       <h1>Sales</h1>
-      <p className="muted">{profile.full_name?.split(' ')[0]}, this is your board. Log every call, meeting and close here. The goals update as you go.</p>
+      <p className="muted">Log every call, meeting, close and cancellation here. Targets update as you go.</p>
 
       <Goals roles={['sales']} refresh={goalsKey} title="Today's targets" />
+      <LiveNumbers />
 
       <div className="card">
         <h2>Log activity</h2>

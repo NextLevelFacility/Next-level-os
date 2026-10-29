@@ -35,7 +35,7 @@ export default function Clinics() {
   // Pull sign-ups from Square: any payment whose line item contains the clinic keyword becomes a registration (never double-counted).
   async function importFromSquare() {
     setImporting(true)
-    const sq = await callFn('square-summary')
+    const sq = await callFn('square-summary', { days: 90 })
     if (!sq.connected) { setImporting(false); return alert(sq.hint || 'Square is not connected yet.') }
     if (sq.error) { setImporting(false); return alert('Square: ' + sq.error) }
     let added = 0
