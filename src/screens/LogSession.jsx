@@ -131,12 +131,12 @@ export default function LogSession() {
                 <>
                   {[['Confidence', 'confidence'], ['Technical', 'technical'], ['Effort', 'effort']].map(([l, k]) => (
                     <div key={k} style={{ marginTop: 10 }}>
-                      <div className="row between"><span className="small" style={{ color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{l}</span><span className="display" style={{ color: 'var(--pink)', fontSize: '1.3rem' }}>{p[k] || '_'}/10</span></div>
+                      <div className="row between"><span className="small muted">{l}</span><span className="display" style={{ fontSize: '1.05rem' }}>{p[k] || '–'}<span className="muted" style={{ fontWeight: 500, fontSize: '0.85rem' }}>/10</span></span></div>
                       <div className="scorepick">{[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => <button key={n} type="button" className={p[k] === n ? 'on' : ''} onClick={() => !locked && setP(a.id, { [k]: n })}>{n}</button>)}</div>
                     </div>
                   ))}
                   <label className="field" style={{ marginTop: 10 }}><span style={{ color: 'var(--good)' }}>Improvements today</span><textarea className="input" style={{ minHeight: 64 }} value={p.improvements || ''} onChange={e => setP(a.id, { improvements: e.target.value })} placeholder="What got better…" disabled={locked} /></label>
-                  <label className="field"><span style={{ color: 'var(--pink)' }}>Weaknesses / work on</span><textarea className="input" style={{ minHeight: 64 }} value={p.weaknesses || ''} onChange={e => setP(a.id, { weaknesses: e.target.value })} placeholder="What to fix next…" disabled={locked} /></label>
+                  <label className="field"><span>Weaknesses / work on</span><textarea className="input" style={{ minHeight: 64 }} value={p.weaknesses || ''} onChange={e => setP(a.id, { weaknesses: e.target.value })} placeholder="What to fix next…" disabled={locked} /></label>
                 </>
               )}
             </div>

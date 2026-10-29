@@ -58,7 +58,7 @@ export default function AthleteDetail() {
       <Link to="/athletes" className="small">← Athletes</Link>
       <div className="row" style={{ gap: 12, margin: '8px 0' }}>
         <div className="avatar" style={{ width: 56, height: 56, fontSize: '1.5rem' }}>{initials(a.full_name)}</div>
-        <div><h1 style={{ fontSize: '2rem' }}>{a.full_name}</h1><div className="small muted">{[a.age && `Age ${a.age}`, a.position, a.club].filter(Boolean).join(' · ')}</div></div>
+        <div><h1>{a.full_name}</h1><div className="small muted">{[a.age && `Age ${a.age}`, a.position, a.club].filter(Boolean).join(' · ')}</div></div>
       </div>
 
       <div className="snap" style={{ marginBottom: 12 }}>
@@ -77,7 +77,7 @@ export default function AthleteDetail() {
         {latest && (latest.improvements || latest.weaknesses) && (
           <div className="dual" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 10 }}>
             <div><div className="small" style={{ color: 'var(--good)' }}>IMPROVED</div><div className="small">{latest.improvements || '—'}</div></div>
-            <div><div className="small" style={{ color: 'var(--pink)' }}>WORK ON</div><div className="small">{latest.weaknesses || '—'}</div></div>
+            <div><div className="small" style={{ color: 'var(--muted)' }}>Work on</div><div className="small">{latest.weaknesses || '—'}</div></div>
           </div>
         )}
       </div>
@@ -121,7 +121,7 @@ export default function AthleteDetail() {
                 <div className="row between"><span style={{ fontWeight: 500 }}>{fmtDate(l.sessions.session_date)} {l.sessions.start_time ? '· ' + l.sessions.start_time.slice(0, 5) : ''} {l.present === false && <span className="pill">absent</span>}</span><span className="pill pink">{l.confidence ?? '_'} · {l.technical ?? '_'} · {l.effort ?? '_'}</span></div>
                 <div className="small muted">{l.sessions.coaches || l.sessions.profiles?.full_name} · {l.sessions.session_type}{l.sessions.focus?.length ? ' · ' + l.sessions.focus.join(', ') : ''}</div>
                 {l.improvements && <div className="small"><span style={{ color: 'var(--good)' }}>↑</span> {l.improvements}</div>}
-                {l.weaknesses && <div className="small"><span style={{ color: 'var(--pink)' }}>→</span> {l.weaknesses}</div>}
+                {l.weaknesses && <div className="small"><span className="muted">→</span> {l.weaknesses}</div>}
               </span></li>
             ))}
           </ul>

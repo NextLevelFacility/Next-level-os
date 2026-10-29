@@ -139,7 +139,7 @@ export default function Dashboard() {
 
       <h2>Retention · this month</h2>
       {ret && (
-        <div className={`card ${ret.onTrack === false ? '' : ''}`} style={ret.onTrack === false ? { borderColor: 'var(--pink)' } : {}}>
+        <div className="card" style={ret.onTrack === false ? { borderColor: 'rgba(229,72,77,0.5)' } : {}}>
           <div className="grid">
             <Stat label="Churn" value={pct(ret.churn)} tone={ret.onTrack == null ? '' : ret.onTrack ? 'gold' : 'pink'} sub={`target under ${ret.target}%`} />
             <Stat label="Cancellations" value={ret.cancelCount} sub={ret.lostMrr ? `-${money(ret.lostMrr)}/mo lost` : ''} />

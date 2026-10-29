@@ -161,12 +161,12 @@ export default function Team() {
           <div className="row" style={{ gap: 6 }}>{[['week', 'This week'], ['lastweek', 'Last week'], ['month', 'This month'], ['lastmonth', 'Last month']].map(([k, l]) => <button key={k} className={`btn small ${period === k ? '' : 'ghost'}`} onClick={() => setPeriod(k)}>{l}</button>)}</div>
           <button className="btn gold small" onClick={exportCsv}>Export CSV</button>
         </div>
-        <div className="card accent"><div className="row between"><span>Total pay this period</span><span className="display" style={{ fontSize: '1.8rem', color: 'var(--gold)' }}>{money(totalPay)}</span></div><p className="small muted">Hours × hourly rate + sessions × per-session rate + {comp?.commission_pct ?? 12}% commission on what each person signed{period.startsWith('month') ? ', + the churn bonus when the month is under target' : ' (churn bonus counts on monthly views)'}.</p></div>
+        <div className="card accent"><div className="row between"><span>Total pay this period</span><span className="display" style={{ fontSize: '1.4rem', color: 'var(--gold)' }}>{money(totalPay)}</span></div><p className="small muted">Hours × hourly rate + sessions × per-session rate + {comp?.commission_pct ?? 12}% commission on what each person signed{period.startsWith('month') ? ', + the churn bonus when the month is under target' : ' (churn bonus counts on monthly views)'}.</p></div>
         {comp && ret && (
           <div className="card">
             <div className="row between wrap">
               <div><h3 style={{ margin: 0 }}>Churn this month</h3><div className="small muted">{ret.cancelCount} cancellation{ret.cancelCount === 1 ? '' : 's'} · {ret.active} active members ({ret.activeSource}) · target under {ret.target}%</div></div>
-              <div className="row" style={{ gap: 8 }}><span className="display" style={{ fontSize: '1.8rem', color: ret.onTrack == null ? 'var(--muted)' : ret.onTrack ? 'var(--good)' : 'var(--pink)' }}>{pct(ret.churn)}</span><span className={`pill ${ret.onTrack == null ? '' : ret.onTrack ? 'good' : 'pink'}`}>{ret.onTrack == null ? 'set member count' : ret.onTrack ? 'bonus on track' : 'over target'}</span></div>
+              <div className="row" style={{ gap: 8 }}><span className="display" style={{ fontSize: '1.4rem', color: ret.onTrack == null ? 'var(--muted)' : ret.onTrack ? 'var(--good)' : 'var(--bad)' }}>{pct(ret.churn)}</span><span className={`pill ${ret.onTrack == null ? '' : ret.onTrack ? 'good' : 'bad'}`}>{ret.onTrack == null ? 'set member count' : ret.onTrack ? 'bonus on track' : 'over target'}</span></div>
             </div>
             {compForm && (
               <div className="row wrap" style={{ gap: 8, marginTop: 10, alignItems: 'flex-end' }}>
@@ -187,7 +187,7 @@ export default function Team() {
             <div className="card" key={p.id}>
               <div className="row between wrap">
                 <div><div style={{ fontWeight: 600 }}>{p.full_name}</div><div className="small muted">{ROLES[p.role]} · {h.toFixed(1)} h · {ss.length} sessions{entries.some(t => !t.clock_out) && <span className="pill good" style={{ marginLeft: 6 }}>on the clock</span>}</div></div>
-                <div style={{ textAlign: 'right' }}><div className="display" style={{ fontSize: '1.5rem', color: 'var(--pink)' }}>{money(payOf(p))}</div>{(commissionOf(p) > 0 || bonusOf(p) > 0) && <div className="small muted">{commissionOf(p) > 0 ? `${money(commissionOf(p))} commission on ${money(signedOf(p.id))}` : ''}{bonusOf(p) > 0 ? ` + ${money(bonusOf(p))} churn bonus` : ''}</div>}</div>
+                <div style={{ textAlign: 'right' }}><div className="display" style={{ fontSize: '1.3rem', color: 'var(--gold)' }}>{money(payOf(p))}</div>{(commissionOf(p) > 0 || bonusOf(p) > 0) && <div className="small muted">{commissionOf(p) > 0 ? `${money(commissionOf(p))} commission on ${money(signedOf(p.id))}` : ''}{bonusOf(p) > 0 ? ` + ${money(bonusOf(p))} churn bonus` : ''}</div>}</div>
               </div>
               <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
                 <label className="field" style={{ margin: 0 }}><span>$ / hour</span><input className="input" type="number" style={{ width: 110, minHeight: 36, padding: '6px 10px' }} defaultValue={p.pay_hourly ?? ''} onBlur={e => e.target.value !== String(p.pay_hourly ?? '') && update(p.id, { pay_hourly: e.target.value === '' ? null : Number(e.target.value) })} /></label>
