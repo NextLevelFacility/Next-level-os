@@ -52,6 +52,7 @@ function describe(d, depth = 0) {
   return '{' + Object.entries(d).slice(0, 25).map(([k, v]) => `${k}: ${describe(v, depth + 1)}`).join(', ') + '}'
 }
 const rawShapes = {}
+const planCache = new Map()   // planId → { name, category }, kept while the function instance is warm
 
 // Pull every page of a list endpoint. Returns { list, status } — status is the first HTTP status so callers can tell 404 (no such endpoint) from 401.
 async function listAll(path, params = {}) {
@@ -122,56 +123,52 @@ export const handler = async (event) => {
     const leads = customers.filter(c => isLead(norm(c.role))).length
     const exMembers = customers.filter(c => /^ex[-_ ]?member|former/.test(norm(c.role))).length
 
-    // 2) Enrollments = a customer on a plan (status: active, pending_cancel, paused, cancelled, completed…). Plans give the names.
-    let enrollments = [], enrollErr = null, planNames = {}
+    // 2) Enrollments = a customer on a plan. Real statuses: active, alert (payment failed), paused, canceled, completed.
+    let enrollments = [], enrollErr = null
     try { enrollments = (await listAll('/enrollments')).list } catch (e) { enrollErr = e.status || String(e.message) }
-    const planProbe = {}
-    for (const path of ['/plans', '/plan', '/products', '/memberships', '/membership-plans', '/billing/plans']) {
-      try { const { list } = await listAll(path); planProbe[path] = `${list.length} · ${describe(list[0])}`; for (const pl of list) if (pl && pl.id) planNames[pl.id] = pl.name || pl.title || pl.id; if (list.length) break } catch (e) { planProbe[path] = e.status || String(e.message).slice(0, 80) }
-    }
-    rawShapes.planProbe = planProbe
-    const sampleMember = customers.find(c => norm(c.role) === 'member')
-    rawShapes.memberSample = describe(sampleMember)
-    rawShapes.membershipDetails = JSON.stringify(sampleMember?.membershipDetails || null).replace(/"[^"]*@[^"]*"/g, '"email"').slice(0, 600)
-    rawShapes.enrollmentSample = describe(enrollments[0])
-    try { const r = await fetch(`${BASE}/enrollments/${enrollments[0]?.id}`, { headers: headers() }); rawShapes.enrollmentGet = `${r.status} · ${describe(await r.json().catch(() => null))}` } catch {}
-    try { const r = await fetch(`${BASE}/plans/${enrollments[0]?.planId}`, { headers: headers() }); rawShapes.planGet = `${r.status} · ${describe(await r.json().catch(() => null))}` } catch {}
     const enrStatus = {}
     for (const e of enrollments) { const st = norm(e.status) || '(none)'; enrStatus[st] = (enrStatus[st] || 0) + 1 }
-    const monthStart = since(), now = new Date()
-    const planLabel = (e) => planNames[e.planId] || planOf(e) || (e.planId ? `Plan ${String(e.planId).slice(-6)}` : 'Member')
-    const endOf = (e) => { const d = dateOf(e); return d }
+
+    // 3) Plan names: there is no list endpoint, but GET /plans/{id} works. Resolve each distinct plan once (cached while the function is warm).
+    const planIds = [...new Set(enrollments.map(e => e.planId).filter(Boolean))].filter(id => !planCache.has(id))
+    await Promise.all(planIds.map(async (id) => {
+      try { const r = await fetch(`${BASE}/plans/${id}`, { headers: headers() }); const d = r.ok ? await r.json() : null; const pl = d?.data || d; planCache.set(id, pl ? { name: pl.name || pl.title || null, category: pl.category?.name || null } : null) } catch { planCache.set(id, null) }
+    }))
+    const planLabel = (e) => planCache.get(e.planId)?.name || planOf(e) || (e.planId ? `Plan ${String(e.planId).slice(-6)}` : 'Member')
     const enrName = (e) => nameOf(byId.get(e.customerId) || e.customer || e) || 'Member'
+    const endOf = (e) => e.endDate ? new Date(e.endDate) : dateOf(e)
+    const monthStart = since(), now = new Date()
 
-    const activeEnr = enrollments.filter(e => isActive(norm(e.status)))
-    const pendingCancel = enrollments.filter(e => /^pending[_ -]?cancel/.test(norm(e.status)))
+    const st = (e) => norm(e.status)
+    const running = enrollments.filter(e => st(e) === 'active' || st(e) === 'alert' || /^pending/.test(st(e)))
+    const paused = enrollments.filter(e => st(e) === 'paused')
+    const alerts = enrollments.filter(e => st(e) === 'alert')
+    const canceled = enrollments.filter(e => /cancel/.test(st(e)))
     const plans = {}
-    for (const e of activeEnr) { const n = planLabel(e); plans[n] = (plans[n] || 0) + 1 }
-    // Cancelled this month = enrollment cancelled whose end date landed in this month (not completed passes/clinics)
-    const cancelledEnr = enrollments.filter(e => /cancel/.test(norm(e.status)) && !/^pending/.test(norm(e.status)))
-    const cancelled = cancelledEnr.map(e => ({ name: enrName(e), plan: planLabel(e), at: endOf(e)?.toISOString() || null }))
-      .filter(x => x.at && new Date(x.at) >= monthStart && new Date(x.at) <= new Date(now.getTime() + 864e5))
-    const leaving = pendingCancel.map(e => ({ name: enrName(e), plan: planLabel(e), at: (e.endDate ? new Date(e.endDate) : null)?.toISOString() || null }))
+    for (const e of running) { const n = planLabel(e); plans[n] = (plans[n] || 0) + 1 }
+    // Canceled with an end date still ahead = leaving (save them). End date already passed this month = churned this month.
+    const leaving = canceled.filter(e => { const d = endOf(e); return d && d > now }).map(e => ({ name: enrName(e), plan: planLabel(e), at: endOf(e).toISOString() }))
+    const cancelled = canceled.filter(e => { const d = endOf(e); return d && d <= now && d >= monthStart }).map(e => ({ name: enrName(e), plan: planLabel(e), at: endOf(e).toISOString() }))
+    const alertList = alerts.map(e => ({ name: enrName(e), plan: planLabel(e), at: e.nextCharge || e.lastCharge || null }))
 
-    // Active members: people PushPress calls members; fall back to unique customers on an active enrollment.
-    const active = members.length || new Set(activeEnr.map(e => e.customerId)).size || null
-    const total = customers.length
-    const cancelledAll = exMembers || cancelledEnr.length
+    // Active members = people PushPress itself calls members (role). Falls back to unique customers on a running plan.
+    const active = members.length || new Set(running.map(e => e.customerId)).size || null
 
     return json(200, {
       connected: true,
       company: pr.company?.name || pr.company?.data?.name || null,
-      active, total, leads, ex_members: exMembers, cancelled_total: cancelledAll,
-      active_enrollments: activeEnr.length,
-      plans: Object.entries(plans).sort((a, b) => b[1] - a[1]).slice(0, 10),
+      active, total: customers.length, leads, ex_members: exMembers, cancelled_total: exMembers || canceled.length,
+      active_enrollments: running.length, paused: paused.length, alerts: alerts.length,
+      alert_list: alertList.slice(0, 20),
+      plans: Object.entries(plans).sort((a, b) => b[1] - a[1]).slice(0, 12),
       cancellations_month: cancelled.length,
       cancelled: cancelled.sort((a, b) => (b.at || '').localeCompare(a.at || '')).slice(0, 50),
-      pending_cancel: pendingCancel.length,
+      pending_cancel: leaving.length,
       leaving: leaving.sort((a, b) => (a.at || '').localeCompare(b.at || '')).slice(0, 50),
       asOf: now.toISOString(),
       shape: {   // diagnostics only — key names and counts, never member data
         auth: authStyle?.[0], customers: customers.length, roleCounts,
-        enrollments: enrollments.length, enrollmentStatus: enrStatus, plansKnown: Object.keys(planNames).length, enrollErr,
+        enrollments: enrollments.length, enrollmentStatus: enrStatus, plansKnown: [...planCache.values()].filter(Boolean).length, enrollErr,
         raw: rawShapes,
       },
     })

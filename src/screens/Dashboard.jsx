@@ -88,16 +88,19 @@ export default function Dashboard() {
       ) : pp.error ? <div className="card"><p className="flag">PushPress: {pp.error}</p></div> : (
         <>
           <div className="grid">
-            <Stat label="Active members" value={pp.active ?? pp.total ?? '—'} tone="gold" sub={pp.active_enrollments ? `${pp.active_enrollments} active plans` : 'from PushPress'} />
-            {pp.leads != null && <Stat label="Leads" value={pp.leads} sub="in PushPress" />}
-            {pp.cancellations_month != null && <Stat label="Cancelled this month" value={pp.cancellations_month} tone={pp.cancellations_month ? 'pink' : ''} />}
-            {pp.pending_cancel != null && <Stat label="Leaving" value={pp.pending_cancel} tone={pp.pending_cancel ? 'pink' : ''} sub="pending cancel · save them" />}
+            <Stat label="Active members" value={pp.active ?? pp.total ?? '—'} tone="gold" sub={pp.active_enrollments ? `${pp.active_enrollments} plans running` : 'from PushPress'} />
+            {pp.leads != null && <Stat label="Leads" value={pp.leads} sub="in PushPress · call list" />}
+            {pp.cancellations_month != null && <Stat label="Cancelled this month" value={pp.cancellations_month} tone={pp.cancellations_month ? 'pink' : ''} sub="plans that ended" />}
+            {pp.pending_cancel != null && <Stat label="Leaving" value={pp.pending_cancel} tone={pp.pending_cancel ? 'pink' : ''} sub="cancelled, still active · save them" />}
+            {pp.alerts != null && <Stat label="Payment alerts" value={pp.alerts} tone={pp.alerts ? 'pink' : ''} sub="card failed · fix today" />}
+            {pp.paused != null && <Stat label="Paused" value={pp.paused} sub="on hold" />}
             {pp.ex_members != null && <Stat label="Ex-members" value={pp.ex_members} sub="win-back list" />}
           </div>
-          {pp.plans?.length > 0 && <div className="card"><h3>Members by plan</h3><ul className="list">{pp.plans.map(([n, c]) => <li key={n}><span className="grow">{n}</span><b>{c}</b></li>)}</ul></div>}
-          {(pp.leaving?.length > 0 || pp.cancelled?.length > 0) && (
+          {pp.plans?.length > 0 && <div className="card"><h3>Running plans · by name</h3><ul className="list">{pp.plans.map(([n, c]) => <li key={n}><span className="grow">{n}</span><b>{c}</b></li>)}</ul></div>}
+          {(pp.alert_list?.length > 0 || pp.leaving?.length > 0 || pp.cancelled?.length > 0) && (
             <div className="card">
-              {pp.leaving?.length > 0 && <><h3>Pending cancel · call them this week</h3><ul className="list">{pp.leaving.slice(0, 10).map((c, i) => <li key={'l' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="pill pink">{c.at ? 'ends ' + new Date(c.at).toLocaleDateString() : 'ending'}</span></li>)}</ul></>}
+              {pp.alert_list?.length > 0 && <><h3>Payment failed · call today</h3><ul className="list">{pp.alert_list.map((c, i) => <li key={'a' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="pill pink">ALERT</span></li>)}</ul></>}
+              {pp.leaving?.length > 0 && <><h3 style={{ marginTop: pp.alert_list?.length ? 12 : 0 }}>Leaving · save them this week</h3><ul className="list">{pp.leaving.slice(0, 10).map((c, i) => <li key={'l' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="pill pink">{c.at ? 'ends ' + new Date(c.at).toLocaleDateString() : 'ending'}</span></li>)}</ul></>}
               {pp.cancelled?.length > 0 && <><h3 style={{ marginTop: 12 }}>Cancelled this month</h3><ul className="list">{pp.cancelled.slice(0, 10).map((c, i) => <li key={'c' + i}><span className="grow">{c.name}{c.plan ? <span className="muted"> · {c.plan}</span> : null}</span><span className="small muted">{c.at ? new Date(c.at).toLocaleDateString() : ''}</span></li>)}</ul></>}
             </div>
           )}
