@@ -5,6 +5,7 @@ import { supabase, today, ROLES, hours, fmtDate } from '../lib/supabase'
 import { callFn, money } from '../lib/api'
 import { REPORT_TYPES } from './Reports.jsx'
 import ClinicBoard from '../components/ClinicBoard.jsx'
+import { loadComp, loadRetention, pct } from '../lib/comp'
 
 const daysAgo = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
 const weekStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toISOString() }
@@ -15,8 +16,10 @@ export default function Dashboard() {
   const [d, setD] = useState(null)
   const [sq, setSq] = useState(null)
   const [pp, setPp] = useState(null)
+  const [ret, setRet] = useState(null)
+  const [comp, setComp] = useState(null)
 
-  useEffect(() => { callFn('square-summary').then(setSq); callFn('pushpress-summary').then(setPp) }, [])
+  useEffect(() => { callFn('square-summary').then(setSq); callFn('pushpress-summary').then(setPp); loadComp().then(async c => { setComp(c); setRet(await loadRetention(c, { allLocations: true })) }) }, [])
   useEffect(() => {
     (async () => {
       const scope = q => loc === 'all' ? q : q.eq('location_id', loc)
@@ -86,6 +89,19 @@ export default function Dashboard() {
         <div className="grid">
           <Stat label="Active members" value={pp.active ?? '—'} tone="gold" />
           {pp.plans?.slice(0, 5).map(([n, c]) => <Stat key={n} label={n} value={c} />)}
+        </div>
+      )}
+
+      <h2>Retention · this month</h2>
+      {ret && (
+        <div className={`card ${ret.onTrack === false ? '' : ''}`} style={ret.onTrack === false ? { borderColor: 'var(--pink)' } : {}}>
+          <div className="grid">
+            <Stat label="Churn" value={pct(ret.churn)} tone={ret.onTrack == null ? '' : ret.onTrack ? 'gold' : 'pink'} sub={`target under ${ret.target}%`} />
+            <Stat label="Cancellations" value={ret.cancelCount} sub={ret.lostMrr ? `-${money(ret.lostMrr)}/mo lost` : ''} />
+            <Stat label="Active members" value={ret.active || '—'} sub={ret.activeSource === 'PushPress' ? 'from PushPress' : 'set on Team → Hours & pay'} />
+            <Stat label="Churn bonus" value={ret.onTrack == null ? '—' : ret.onTrack ? 'ON TRACK' : 'MISSED'} tone={ret.onTrack ? 'gold' : 'pink'} sub={(comp?.bonus_people || []).join(' · ')} />
+          </div>
+          {ret.cancels.length > 0 && <ul className="list" style={{ marginTop: 8 }}>{ret.cancels.slice(0, 8).map(c => <li key={c.id}><span className="grow small"><div>{c.name} <span className="muted">· {c.program || ''}</span></div><div className="muted">{c.note} · {c.log_date}</div></span>{c.amount ? <span className="pill pink">-{money(c.amount)}/mo</span> : null}</li>)}</ul>}
         </div>
       )}
 

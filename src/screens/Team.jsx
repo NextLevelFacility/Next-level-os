@@ -3,6 +3,7 @@ import { useAuth } from '../lib/auth.jsx'
 import { supabase, ROLES, isManager, isCoach, hours, fmtTime } from '../lib/supabase'
 import { money } from '../lib/api'
 import { sops } from '../lib/vault'
+import { loadComp, saveComp, loadRetention, commissionFor, isBonusPerson, pct } from '../lib/comp'
 import { roleMatches } from './Today.jsx'
 
 const periods = {
@@ -13,7 +14,7 @@ const periods = {
 }
 
 export default function Team() {
-  const { role, locations, refresh, user } = useAuth()
+  const { role, locations, refresh, user, locationId } = useAuth()
   const manager = isManager(role)
   const [people, setPeople] = useState([])
   const [reads, setReads] = useState([])
@@ -27,6 +28,10 @@ export default function Team() {
   const [modsDone, setModsDone] = useState([])
   const [modsTotal, setModsTotal] = useState(0)
   const [invites, setInvites] = useState([])
+  const [comp, setComp] = useState(null)
+  const [ret, setRet] = useState(null)
+  const [salesPeriod, setSalesPeriod] = useState([])
+  const [compForm, setCompForm] = useState(null)
   const [inviteForm, setInviteForm] = useState(null)
 
   async function load() {
@@ -43,6 +48,12 @@ export default function Team() {
       ])
       setReads(r || []); setTime(t || []); setSessions(s || []); setGoals(g || []); setModsDone(mp || []); setModsTotal((ms || []).length)
       const { data: inv } = await supabase.from('team_invites').select('*').is('claimed_by', null).order('created_at'); setInvites(inv || [])
+      const c = await loadComp(); setComp(c); setCompForm(c)
+      const current = period === 'week' || period === 'month'
+      const toEx = current ? new Date(Date.now() + 864e5) : to
+      const { data: sl } = await supabase.from('sales_log').select('user_id, kind, amount').gte('log_date', from.toISOString().slice(0, 10)).lt('log_date', toEx.toISOString().slice(0, 10))
+      setSalesPeriod(sl || [])
+      setRet(await loadRetention(c, { allLocations: role === 'owner', locationId }))
     }
   }
   useEffect(() => { load() }, [role, period])
@@ -54,11 +65,14 @@ export default function Team() {
   const locName = id => locations.find(l => l.id === id)?.name || '—'
   const hoursOf = uid => time.filter(t => t.user_id === uid).reduce((a, t) => a + ((t.clock_out ? new Date(t.clock_out) : new Date()) - new Date(t.clock_in)), 0) / 36e5
   const sessionsOf = uid => sessions.filter(s => s.coach_id === uid)
-  const payOf = p => { const h = hoursOf(p.id), n = sessionsOf(p.id).length; return (Number(p.pay_hourly) || 0) * h + (Number(p.pay_per_session) || 0) * n }
+  const signedOf = uid => salesPeriod.filter(x => x.user_id === uid && x.kind === 'close').reduce((a, x) => a + (Number(x.amount) || 0), 0)
+  const commissionOf = p => comp ? commissionFor(signedOf(p.id), p, comp) : 0
+  const bonusOf = p => (comp && ret && ret.onTrack && isBonusPerson(p, comp) && period.startsWith('month')) ? Number(comp.churn_bonus) || 0 : 0
+  const payOf = p => { const h = hoursOf(p.id), n = sessionsOf(p.id).length; return (Number(p.pay_hourly) || 0) * h + (Number(p.pay_per_session) || 0) * n + commissionOf(p) + bonusOf(p) }
   const totalPay = people.reduce((a, p) => a + payOf(p), 0)
 
   function exportCsv() {
-    const rows = [['Name', 'Role', 'Hours', 'Sessions', 'Hourly rate', 'Per-session rate', 'Pay'], ...people.map(p => [p.full_name, p.role, hoursOf(p.id).toFixed(2), sessionsOf(p.id).length, p.pay_hourly || '', p.pay_per_session || '', payOf(p).toFixed(2)])]
+    const rows = [['Name', 'Role', 'Hours', 'Sessions', 'Hourly rate', 'Per-session rate', 'Signed', 'Commission', 'Churn bonus', 'Pay'], ...people.map(p => [p.full_name, p.role, hoursOf(p.id).toFixed(2), sessionsOf(p.id).length, p.pay_hourly || '', p.pay_per_session || '', signedOf(p.id).toFixed(2), commissionOf(p).toFixed(2), bonusOf(p).toFixed(2), payOf(p).toFixed(2)])]
     const blob = new Blob([rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `next-level-pay-${period}.csv`; a.click()
   }
@@ -142,18 +156,38 @@ export default function Team() {
           <div className="row" style={{ gap: 6 }}>{[['week', 'This week'], ['lastweek', 'Last week'], ['month', 'This month'], ['lastmonth', 'Last month']].map(([k, l]) => <button key={k} className={`btn small ${period === k ? '' : 'ghost'}`} onClick={() => setPeriod(k)}>{l}</button>)}</div>
           <button className="btn gold small" onClick={exportCsv}>Export CSV</button>
         </div>
-        <div className="card accent"><div className="row between"><span>Total pay this period</span><span className="display" style={{ fontSize: '1.8rem', color: 'var(--gold)' }}>{money(totalPay)}</span></div><p className="small muted">Hours from the clock × hourly rate, plus sessions logged × per-session rate. Set rates per person below.</p></div>
+        <div className="card accent"><div className="row between"><span>Total pay this period</span><span className="display" style={{ fontSize: '1.8rem', color: 'var(--gold)' }}>{money(totalPay)}</span></div><p className="small muted">Hours × hourly rate + sessions × per-session rate + {comp?.commission_pct ?? 12}% commission on what each person signed{period.startsWith('month') ? ', + the churn bonus when the month is under target' : ' (churn bonus counts on monthly views)'}.</p></div>
+        {comp && ret && (
+          <div className="card">
+            <div className="row between wrap">
+              <div><h3 style={{ margin: 0 }}>Churn this month</h3><div className="small muted">{ret.cancelCount} cancellation{ret.cancelCount === 1 ? '' : 's'} · {ret.active} active members ({ret.activeSource}) · target under {ret.target}%</div></div>
+              <div className="row" style={{ gap: 8 }}><span className="display" style={{ fontSize: '1.8rem', color: ret.onTrack == null ? 'var(--muted)' : ret.onTrack ? 'var(--good)' : 'var(--pink)' }}>{pct(ret.churn)}</span><span className={`pill ${ret.onTrack == null ? '' : ret.onTrack ? 'good' : 'pink'}`}>{ret.onTrack == null ? 'set member count' : ret.onTrack ? 'bonus on track' : 'over target'}</span></div>
+            </div>
+            {compForm && (
+              <div className="row wrap" style={{ gap: 8, marginTop: 10, alignItems: 'flex-end' }}>
+                <label className="field" style={{ margin: 0 }}><span>Commission %</span><input className="input" type="number" style={{ width: 90, minHeight: 36, padding: '6px 10px' }} value={compForm.commission_pct} onChange={e => setCompForm({ ...compForm, commission_pct: Number(e.target.value) })} /></label>
+                <label className="field" style={{ margin: 0 }}><span>Churn target %</span><input className="input" type="number" style={{ width: 90, minHeight: 36, padding: '6px 10px' }} value={compForm.churn_target_pct} onChange={e => setCompForm({ ...compForm, churn_target_pct: Number(e.target.value) })} /></label>
+                <label className="field" style={{ margin: 0 }}><span>Churn bonus $ (each)</span><input className="input" type="number" style={{ width: 110, minHeight: 36, padding: '6px 10px' }} value={compForm.churn_bonus} onChange={e => setCompForm({ ...compForm, churn_bonus: Number(e.target.value) })} /></label>
+                <label className="field" style={{ margin: 0 }}><span>Bonus people</span><input className="input" style={{ width: 160, minHeight: 36, padding: '6px 10px' }} value={(compForm.bonus_people || []).join(', ')} onChange={e => setCompForm({ ...compForm, bonus_people: e.target.value.split(',').map(x => x.trim()).filter(Boolean) })} /></label>
+                {!ret.ppConnected && <label className="field" style={{ margin: 0 }}><span>Active members (until PushPress is connected)</span><input className="input" type="number" style={{ width: 120, minHeight: 36, padding: '6px 10px' }} value={compForm.active_members_manual} onChange={e => setCompForm({ ...compForm, active_members_manual: Number(e.target.value) })} /></label>}
+                <button className="btn small" onClick={async () => { const { error } = await saveComp(compForm); if (error) alert(error.message); else load() }}>Save</button>
+              </div>
+            )}
+            {ret.cancels.length > 0 && <ul className="list" style={{ marginTop: 8 }}>{ret.cancels.map(c => <li key={c.id}><span className="grow small"><div>{c.name} <span className="muted">· {c.program || ''}{c.amount ? ` · -${money(c.amount)}/mo` : ''}</span></div><div className="muted">{c.note} · {c.log_date} · logged by {c.profiles?.full_name}</div></span></li>)}</ul>}
+          </div>
+        )}
         {people.map(p => {
           const h = hoursOf(p.id), ss = sessionsOf(p.id), entries = time.filter(t => t.user_id === p.id)
           return (
             <div className="card" key={p.id}>
               <div className="row between wrap">
                 <div><div style={{ fontWeight: 600 }}>{p.full_name}</div><div className="small muted">{ROLES[p.role]} · {h.toFixed(1)} h · {ss.length} sessions{entries.some(t => !t.clock_out) && <span className="pill good" style={{ marginLeft: 6 }}>on the clock</span>}</div></div>
-                <div className="display" style={{ fontSize: '1.5rem', color: 'var(--pink)' }}>{money(payOf(p))}</div>
+                <div style={{ textAlign: 'right' }}><div className="display" style={{ fontSize: '1.5rem', color: 'var(--pink)' }}>{money(payOf(p))}</div>{(commissionOf(p) > 0 || bonusOf(p) > 0) && <div className="small muted">{commissionOf(p) > 0 ? `${money(commissionOf(p))} commission on ${money(signedOf(p.id))}` : ''}{bonusOf(p) > 0 ? ` + ${money(bonusOf(p))} churn bonus` : ''}</div>}</div>
               </div>
               <div className="row wrap" style={{ gap: 8, marginTop: 8 }}>
                 <label className="field" style={{ margin: 0 }}><span>$ / hour</span><input className="input" type="number" style={{ width: 110, minHeight: 36, padding: '6px 10px' }} defaultValue={p.pay_hourly ?? ''} onBlur={e => e.target.value !== String(p.pay_hourly ?? '') && update(p.id, { pay_hourly: e.target.value === '' ? null : Number(e.target.value) })} /></label>
                 <label className="field" style={{ margin: 0 }}><span>$ / session</span><input className="input" type="number" style={{ width: 110, minHeight: 36, padding: '6px 10px' }} defaultValue={p.pay_per_session ?? ''} onBlur={e => e.target.value !== String(p.pay_per_session ?? '') && update(p.id, { pay_per_session: e.target.value === '' ? null : Number(e.target.value) })} /></label>
+                {[p.role, ...(p.roles || [])].includes('sales') && <label className="field" style={{ margin: 0 }}><span>Commission % (blank = {comp?.commission_pct ?? 12})</span><input className="input" type="number" style={{ width: 110, minHeight: 36, padding: '6px 10px' }} defaultValue={p.pay_commission_pct ?? ''} onBlur={e => e.target.value !== String(p.pay_commission_pct ?? '') && update(p.id, { pay_commission_pct: e.target.value === '' ? null : Number(e.target.value) })} /></label>}
                 <button className="btn ghost small" style={{ alignSelf: 'flex-end' }} onClick={() => setOpen(open === p.id ? null : p.id)}>{open === p.id ? 'Hide' : 'Clock-ins'}</button>
               </div>
               {open === p.id && (

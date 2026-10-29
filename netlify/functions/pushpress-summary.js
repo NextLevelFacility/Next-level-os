@@ -20,7 +20,19 @@ exports.handler = async (event) => {
     } else {
       return json(200, { connected: true, error: `PushPress responded ${r.status}. Check the API key or base URL.` })
     }
-    return json(200, { connected: true, active, total, plans: Object.entries(plans).sort((a, b) => b[1] - a[1]).slice(0, 10), asOf: new Date().toISOString() })
+    // Cancellations this month (best effort: PushPress exposes cancelled customers with a cancellation/updated date)
+    let cancellations_month = null, cancelled = []
+    try {
+      const since = new Date(); since.setDate(1); since.setHours(0, 0, 0, 0)
+      const rc = await fetch(`${base}/customers?limit=500&status=cancelled`, { headers: h })
+      if (rc.ok) {
+        const dc = await rc.json(); const list = dc.data || dc.customers || dc.results || []
+        cancelled = list.filter(c => { const d = c.cancelledAt || c.cancelled_at || c.canceledAt || c.updatedAt || c.updated_at; return d && new Date(d) >= since })
+          .map(c => ({ name: [c.firstName || c.first_name, c.lastName || c.last_name].filter(Boolean).join(' ') || c.name || c.email, at: c.cancelledAt || c.cancelled_at || c.canceledAt || c.updatedAt || c.updated_at }))
+        cancellations_month = cancelled.length
+      }
+    } catch {}
+    return json(200, { connected: true, active, total, plans: Object.entries(plans).sort((a, b) => b[1] - a[1]).slice(0, 10), cancellations_month, cancelled: cancelled.slice(0, 50), asOf: new Date().toISOString() })
   } catch (e) {
     return json(200, { connected: true, error: String(e.message || e) })
   }
