@@ -125,12 +125,13 @@ export default function Dashboard() {
             <Stat label="New leads · 7 days" value={ghl.leads.week} />
             <Stat label="New leads · month" value={ghl.leads.month} />
             <Stat label="Open opportunities" value={ghl.pipeline.open} />
-            <Stat label="Won this month" value={ghl.pipeline.wonMonth} sub={ghl.pipeline.wonValue ? money(ghl.pipeline.wonValue) : ''} tone="gold" />
+            <Stat label="Won this month" value={ghl.pipeline.wonMonth} sub={ghl.pipeline.wonValue ? money(ghl.pipeline.wonValue) : 'marked won in GHL'} tone="gold" />
             <Stat label="Evals today" value={ghl.appointments.today} sub={`${ghl.appointments.upcoming7} booked next 7 days`} />
             <Stat label="Showed · 7 days" value={ghl.appointments.showed7} sub={`${ghl.appointments.noshow7} no-shows`} />
           </div>
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
-            {ghl.pipeline.byStage?.length > 0 && <div className="card" style={{ margin: 0 }}><h3 style={{ marginTop: 0 }}>Pipeline by stage</h3><ul className="list">{ghl.pipeline.byStage.map(([n, c]) => <li key={n}><span className="grow small">{n}</span><b>{c}</b></li>)}</ul></div>}
+            {ghl.pipeline.byPipeline?.length > 0 && <div className="card" style={{ margin: 0 }}><h3 style={{ marginTop: 0 }}>Open by pipeline</h3><ul className="list">{ghl.pipeline.byPipeline.map(([n, c]) => <li key={n}><span className="grow small">{n}</span><b>{c}</b></li>)}</ul></div>}
+            {ghl.pipeline.byStage?.length > 0 && <div className="card" style={{ margin: 0 }}><h3 style={{ marginTop: 0 }}>Sales pipeline by stage</h3><ul className="list">{ghl.pipeline.byStage.map(([n, c]) => <li key={n}><span className="grow small">{n.split(' · ').slice(1).join(' · ')}</span><b>{c}</b></li>)}</ul></div>}
             {ghl.leads.sources?.length > 0 && <div className="card" style={{ margin: 0 }}><h3 style={{ marginTop: 0 }}>Lead sources · month</h3><ul className="list">{ghl.leads.sources.map(([n, c]) => <li key={n}><span className="grow small">{n}</span><b>{c}</b></li>)}</ul></div>}
           </div>
           {ghl.appointments.todayList?.length > 0 && <div className="card" style={{ marginTop: 8 }}><h3 style={{ marginTop: 0 }}>Today's appointments</h3><ul className="list">{ghl.appointments.todayList.map((a, i) => <li key={i}><span className="pill">{new Date(a.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span><span className="grow small">{a.title}{a.calendar ? <span className="muted"> · {a.calendar}</span> : null}</span>{a.status && <span className={`pill ${a.status === 'showed' ? 'good' : /no/.test(a.status) ? 'bad' : ''}`}>{a.status}</span>}</li>)}</ul></div>}

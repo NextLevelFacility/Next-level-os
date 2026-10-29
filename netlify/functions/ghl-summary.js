@@ -43,14 +43,19 @@ async function leadsSince(startIso, endIso) {
 async function pipelines() {
   try { const d = await ghl(`/opportunities/pipelines?locationId=${encodeURIComponent(LOC())}`); return d.pipelines || [] } catch { return [] }
 }
-async function opportunities(status, extra = '') {
+// Opportunity counts come from the search endpoint's meta.total — no paging through thousands of records.
+async function oppCount(params) {
+  const d = await ghl(`/opportunities/search?location_id=${encodeURIComponent(LOC())}&limit=1&${params}`)
+  return { total: d.meta?.total ?? (d.opportunities || []).length, sample: d.opportunities || [] }
+}
+async function oppList(params, pages = 3) {
   let out = [], startAfter = '', startAfterId = '', guard = 0
   do {
-    const d = await ghl(`/opportunities/search?location_id=${encodeURIComponent(LOC())}&limit=100&status=${status}${extra}${startAfterId ? `&startAfter=${startAfter}&startAfterId=${startAfterId}` : ''}`)
+    const d = await ghl(`/opportunities/search?location_id=${encodeURIComponent(LOC())}&limit=100&${params}${startAfterId ? `&startAfter=${startAfter}&startAfterId=${startAfterId}` : ''}`)
     out = out.concat(d.opportunities || [])
     startAfter = d.meta?.startAfter || ''; startAfterId = d.meta?.startAfterId || ''
     guard++
-  } while (startAfterId && guard < 20)
+  } while (startAfterId && guard < pages)
   return out
 }
 
@@ -82,17 +87,22 @@ async function summary() {
   for (const c of month.contacts) { const s = (c.source || c.attributionSource?.sessionSource || 'Unknown').trim(); sources[s] = (sources[s] || 0) + 1 }
   const newest = today.contacts.slice(0, 10).map(c => ({ name: [c.firstName, c.lastName].filter(Boolean).join(' ') || c.contactName || c.email || 'Lead', source: c.source || '', at: c.dateAdded }))
 
-  // Pipeline
+  // Pipeline: open total, open per pipeline, stages of the main sales pipeline, won this month
   const pls = await pipelines()
-  const stageName = {}; const pipeName = {}
-  for (const p of pls) { pipeName[p.id] = p.name; for (const s of p.stages || []) stageName[s.id] = s.name }
-  let open = [], won = [], oppErr = null
-  try { open = await opportunities('open') } catch (e) { oppErr = String(e.message) }
-  try { won = await opportunities('won', `&date=${encodeURIComponent(startMonth.toISOString())}`) } catch {}
-  const byStage = {}
-  for (const o of open) { const k = `${pipeName[o.pipelineId] ? pipeName[o.pipelineId] + ' · ' : ''}${stageName[o.pipelineStageId] || o.pipelineStageId || 'Stage'}`; byStage[k] = (byStage[k] || 0) + 1 }
-  const wonMonth = won.filter(o => new Date(o.lastStatusChangeAt || o.updatedAt || o.createdAt) >= startMonth)
-  const wonValue = wonMonth.reduce((a, o) => a + (Number(o.monetaryValue) || 0), 0)
+  let open = 0, byPipeline = [], byStage = [], wonMonth = 0, wonValue = 0, oppErr = null
+  try {
+    open = (await oppCount('status=open')).total
+    const perPipe = await Promise.all(pls.map(async p => [p.name, (await oppCount(`status=open&pipeline_id=${encodeURIComponent(p.id)}`)).total, p]))
+    byPipeline = perPipe.map(([n, c]) => [n, c]).sort((a, b) => b[1] - a[1])
+    const main = perPipe.find(([n]) => /^sales/i.test(n))?.[2] || perPipe.sort((a, b) => b[1] - a[1])[0]?.[2]
+    if (main) {
+      const stages = await Promise.all((main.stages || []).slice(0, 12).map(async st => [st.name, (await oppCount(`status=open&pipeline_id=${encodeURIComponent(main.id)}&pipeline_stage_id=${encodeURIComponent(st.id)}`)).total]))
+      byStage = stages.map(([n, c]) => [`${main.name} · ${n}`, c])
+    }
+    const won = await oppList(`status=won&date=${encodeURIComponent(startMonth.toISOString())}`, 2)
+    const wonM = won.filter(o => new Date(o.lastStatusChangeAt || o.updatedAt || o.createdAt) >= startMonth)
+    wonMonth = wonM.length; wonValue = wonM.reduce((a, o) => a + (Number(o.monetaryValue) || 0), 0)
+  } catch (e) { oppErr = String(e.message) }
 
   // Appointments: this week past (showed / no-show) and next 7 days booked
   const ap = await appointments(start7.getTime(), weekAhead.getTime())
@@ -104,7 +114,7 @@ async function summary() {
   return {
     connected: true, location: locationName,
     leads: { today: today.total, week: week.total, month: month.total, sources: Object.entries(sources).sort((a, b) => b[1] - a[1]).slice(0, 8), newest },
-    pipeline: { open: open.length, byStage: Object.entries(byStage).sort((a, b) => b[1] - a[1]).slice(0, 10), wonMonth: wonMonth.length, wonValue, error: oppErr },
+    pipeline: { open, byPipeline, byStage, wonMonth, wonValue, error: oppErr },
     appointments: {
       calendars: ap.calendars, today: todayAppts.length, upcoming7: upcoming.length,
       showed7: past.filter(e => st(e) === 'showed').length, noshow7: past.filter(e => st(e) === 'noshow' || st(e) === 'no-show').length, cancelled7: past.filter(e => st(e) === 'cancelled').length,
