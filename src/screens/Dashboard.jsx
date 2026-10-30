@@ -52,7 +52,7 @@ export default function Dashboard() {
       </div>
       <p className="muted small">Open this once a day. Everything below updates on its own.</p>
 
-      <SheetsKpis sheets={sheets} />
+      <SheetsKpis sheets={sheets} owner={role === 'owner'} onRefresh={() => callFn('sheets-summary', { force: true }).then(setSheets)} />
 
       <h2>Sales · Square</h2>
       {!sq ? <p className="muted">Loading Square…</p> : !sq.connected ? (
