@@ -1,4 +1,4 @@
-// One Google Sheet tracker per person (Daily log + Dashboard tabs), rolled up for the CEO dashboard.
+// One Google Sheet tracker per person (a Dashboard tab with the targets + one tab per month, e.g. "Nov 2026"), rolled up for the CEO dashboard.
 // Which sheet belongs to whom lives in the kpi_sheets table (owner-editable in the app).
 // Each sheet must be shared "Anyone with the link · Viewer" — the reader uses Google's public CSV export, no API key.
 import { requireUser, json } from './_auth.js'
@@ -24,7 +24,18 @@ function parseCsv(text) {
   if (field.length || row.length) { row.push(field); rows.push(row) }
   return rows
 }
-const asObjects = (rows) => { const header = (rows[0] || []).map(h => h.trim()); return rows.slice(1).filter(r => r.some(v => v && v.trim())).map(r => Object.fromEntries(header.map((h, i) => [h, (r[i] || '').trim()]))) }
+// The daily grid on a month tab starts at the row whose first cell is "Date"; the rows above it are the person's totals.
+function gridRows(rows, year) {
+  const h = rows.findIndex(r => String(r[0] || '').trim() === 'Date')
+  if (h < 0) return []
+  const header = rows[h].map(x => x.trim()); const out = []
+  for (const r of rows.slice(h + 1)) {
+    const d = dayKey(r[0], year); if (!d) { if (out.length) break; else continue }
+    out.push({ ...Object.fromEntries(header.map((k, i) => [k, (r[i] || '').trim()])), Date: d })
+  }
+  return out
+}
+const monthTab = (y, m) => new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })   // "Nov 2026"
 
 // ---------- calendar (Miami days) ----------
 const TZ = process.env.BUSINESS_TZ || 'America/New_York'
@@ -35,10 +46,11 @@ function todayParts() {
 }
 const key = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 // Dates arrive however the sheet formats them ("Thu 10/29/26", "10/29/2026", "2026-10-29") — pull the calendar day out.
-function dayKey(s) {
+function dayKey(s, year) {
   const a = String(s || '').trim()
   let m = a.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (m) return key(m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]), Number(m[1]), Number(m[2]))
   m = a.match(/(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`
+  m = a.match(/^(?:[A-Za-z]{3}\.?\s+)?(\d{1,2})\/(\d{1,2})$/); if (m && year) return key(year, Number(m[1]), Number(m[2]))
   return null
 }
 const num = (v) => { const s = String(v ?? '').trim(); if (!s) return 0; const pct = /%$/.test(s); const n = Number(s.replace(/[$,%\s]/g, '')); return isFinite(n) ? (pct ? n / 100 : n) : 0 }
@@ -52,7 +64,8 @@ function windows() {
   const monday = new Date(today.getTime() - dow * 864e5)
   const k = (d) => key(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate())
   const weekStarts = [0, 1, 2, 3].map(i => k(new Date(monday.getTime() - i * 7 * 864e5)))
-  return { today: k(today), weekStart: k(monday), monthStart: key(t.y, t.m, 1), workDays: Math.min(6, dow + 1), dayOfMonth: t.d, weekStarts }
+  const prev = t.m === 1 ? { y: t.y - 1, m: 12 } : { y: t.y, m: t.m - 1 }
+  return { today: k(today), weekStart: k(monday), monthStart: key(t.y, t.m, 1), workDays: Math.min(6, dow + 1), dayOfMonth: t.d, weekStarts, cur: { y: t.y, m: t.m, tab: monthTab(t.y, t.m) }, prev: { ...prev, tab: monthTab(prev.y, prev.m) } }
 }
 
 // ---------- targets (the yellow cells on each sheet's Dashboard tab) ----------
@@ -78,11 +91,11 @@ const ratio = (a, b) => b > 0 ? +(a / b).toFixed(3) : null
 
 function person(row, log, dash) {
   const w = windows()
-  const headers = Object.keys(log[0] || {})
+  const headers = log.length ? Object.keys(log[0]) : (row.kind === 'sales' ? [...SALES, 'Rate day 1-10', ...COACH] : row.kind === 'coach' ? COACH : CONC)
   const checks = headers.filter(h => h.startsWith('✓'))
   const metrics = [...SALES, ...COACH, ...CONC].filter(m => headers.includes(m))
   const targets = readTargets(dash, row.kind)
-  const p = { name: row.name, kind: row.kind, sheetId: row.sheet_id, url: `https://docs.google.com/spreadsheets/d/${row.sheet_id}/edit`, metrics, today: {}, week: {}, month: {}, weeks: {}, lastFilled: null, filledToday: false, targets, checklist: null }
+  const p = { name: row.name, kind: row.kind, sheetId: row.sheet_id, metrics, today: {}, week: {}, month: {}, weeks: {}, lastFilled: null, filledToday: false, targets, checklist: null }
   const rated = { week: [], month: [] }
   const checkDays = {}                                           // day → {pct, missed}
   for (const r of log) {
@@ -139,11 +152,15 @@ async function summary(sb) {
   const w = windows()
   const out = { connected: true, asOf: new Date().toISOString(), windows: w, people: [], sheets: { sales: { people: [] }, coaches: { people: [] }, concession: { people: [] } } }
   await Promise.all(rows.map(async (row) => {
+    const url = `https://docs.google.com/spreadsheets/d/${row.sheet_id}/edit`
     try {
-      const [log, dash] = await Promise.all([fetchTab(row.sheet_id, 'Daily log'), fetchTab(row.sheet_id, 'Dashboard').catch(() => [])])
-      out.people.push(person(row, asObjects(log), dash))
+      const [curRows, prevRows, dash] = await Promise.all([fetchTab(row.sheet_id, w.cur.tab), fetchTab(row.sheet_id, w.prev.tab).catch(() => []), fetchTab(row.sheet_id, 'Dashboard').catch(() => [])])
+      const curGrid = gridRows(curRows, w.cur.y)
+      if (!curGrid.length) throw new Error(`No "${w.cur.tab}" tab in this sheet — add the month tab (duplicate last month's and change the date in B3).`)
+      const log = [...gridRows(prevRows, w.prev.y), ...curGrid]
+      out.people.push({ ...person(row, log, dash), url, tab: w.cur.tab })
     } catch (e) {
-      out.people.push({ name: row.name, kind: row.kind, sheetId: row.sheet_id, url: `https://docs.google.com/spreadsheets/d/${row.sheet_id}/edit`, error: e.code === 'share' ? 'Not readable yet — open the sheet → Share → General access → "Anyone with the link" → Viewer.' : String(e.message || e) })
+      out.people.push({ name: row.name, kind: row.kind, sheetId: row.sheet_id, url, error: e.code === 'share' ? 'Not readable yet — open the sheet → Share → General access → "Anyone with the link" → Viewer.' : String(e.message || e) })
     }
   }))
   out.people.sort((a, b) => rows.findIndex(r => r.sheet_id === a.sheetId) - rows.findIndex(r => r.sheet_id === b.sheetId))
