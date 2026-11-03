@@ -56,7 +56,7 @@ export default function Dashboard() {
 
       <TodayPanel userId={session?.user?.id} />
 
-      <h2 style={{ marginTop: 18 }}>Revenue</h2>
+      <div style={{ marginTop: 18 }} />
       <RevenuePie sq={sq} pp={pp} />
 
       <SheetsKpis sheets={sheets} owner={role === 'owner'} onRefresh={() => callFn('sheets-summary', { force: true }).then(setSheets)} />
