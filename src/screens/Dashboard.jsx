@@ -5,13 +5,14 @@ import { supabase } from '../lib/supabase'
 import { callFn, money } from '../lib/api'
 import SheetsKpis from '../components/SheetsKpis.jsx'
 import PayCard from '../components/PayCard.jsx'
+import TodayPanel from '../components/TodayPanel.jsx'
 import ClinicsCard from '../components/ClinicsCard.jsx'
 import { loadComp, loadRetention, pct } from '../lib/comp'
 
 const daysAgo = n => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
 
 export default function Dashboard() {
-  const { role, locationId, locations } = useAuth()
+  const { role, locationId, locations, session } = useAuth()
   const [loc, setLoc] = useState(role === 'owner' ? 'all' : locationId)
   const [d, setD] = useState(null)
   const [sq, setSq] = useState(null)
@@ -51,6 +52,8 @@ export default function Dashboard() {
         )}
       </div>
       <p className="muted small">Open this once a day. Everything below updates on its own.</p>
+
+      <TodayPanel userId={session?.user?.id} />
 
       <SheetsKpis sheets={sheets} owner={role === 'owner'} onRefresh={() => callFn('sheets-summary', { force: true }).then(setSheets)} />
 
