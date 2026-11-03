@@ -6,6 +6,7 @@ import { callFn, money } from '../lib/api'
 import SheetsKpis from '../components/SheetsKpis.jsx'
 import PayCard from '../components/PayCard.jsx'
 import TodayPanel from '../components/TodayPanel.jsx'
+import RevenuePie from '../components/RevenuePie.jsx'
 import ClinicsCard from '../components/ClinicsCard.jsx'
 import { loadComp, loadRetention, pct } from '../lib/comp'
 
@@ -54,6 +55,9 @@ export default function Dashboard() {
       <p className="muted small">Open this once a day. Everything below updates on its own.</p>
 
       <TodayPanel userId={session?.user?.id} />
+
+      <h2 style={{ marginTop: 18 }}>Revenue</h2>
+      <RevenuePie sq={sq} pp={pp} />
 
       <SheetsKpis sheets={sheets} owner={role === 'owner'} onRefresh={() => callFn('sheets-summary', { force: true }).then(setSheets)} />
 
