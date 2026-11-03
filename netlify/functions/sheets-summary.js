@@ -5,8 +5,9 @@ import { requireUser, json } from './_auth.js'
 import { cached } from './_cache.js'
 
 // ---------- Google Sheets CSV ----------
-async function fetchTab(id, tab) {
-  const r = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(tab)}`, { redirect: 'follow' })
+// range keeps each column a single type (Google's CSV export blanks cells that don't match a column's main type)
+async function fetchTab(id, tab, range) {
+  const r = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&headers=1&sheet=${encodeURIComponent(tab)}${range ? '&range=' + range : ''}`, { redirect: 'follow' })
   const text = await r.text()
   if (!r.ok || /<html/i.test(text.slice(0, 300))) { const e = new Error('not shared'); e.code = 'share'; throw e }
   return parseCsv(text)
@@ -154,7 +155,7 @@ async function summary(sb) {
   await Promise.all(rows.map(async (row) => {
     const url = `https://docs.google.com/spreadsheets/d/${row.sheet_id}/edit`
     try {
-      const [curRows, prevRows, dash] = await Promise.all([fetchTab(row.sheet_id, w.cur.tab), fetchTab(row.sheet_id, w.prev.tab).catch(() => []), fetchTab(row.sheet_id, 'Dashboard').catch(() => [])])
+      const [curRows, prevRows, dash] = await Promise.all([fetchTab(row.sheet_id, w.cur.tab, 'A10:Z42'), fetchTab(row.sheet_id, w.prev.tab, 'A10:Z42').catch(() => []), fetchTab(row.sheet_id, 'Dashboard', 'A6:C12').catch(() => [])])
       const curGrid = gridRows(curRows, w.cur.y)
       if (!curGrid.length) throw new Error(`No "${w.cur.tab}" tab in this sheet — add the month tab (duplicate last month's and change the date in B3).`)
       const log = [...gridRows(prevRows, w.prev.y), ...curGrid]
