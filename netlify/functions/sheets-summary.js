@@ -85,7 +85,7 @@ function readTargets(rows, kind) {
 // ---------- rollup ----------
 const SALES = ['Calls', 'Meetings Today', 'Meetings Booked', 'Showed', 'Sold of showed', 'Upfront Cash Collected', 'Referrals']
 const COACH = ['Sessions trained', 'Total players trained']
-const CONC = ['Items sold', 'Boots rented', 'Field rentals hosted', 'Birthday parties hosted', 'Videos recorded', 'Insta stories posted', 'Bathroom cleaned (# times)', 'Complaints', 'Reviews asked for']
+const CONC = ['Items sold', 'Boots rented', 'Field rentals hosted', 'Birthday parties hosted', 'Field rentals rented out', 'Field rental cash', 'Birthdays rented out', 'Birthday cash', 'Videos recorded', 'Insta stories posted', 'Bathroom cleaned (# times)', 'Complaints', 'Reviews asked for']
 const state = (pct) => pct == null ? null : pct >= 1 ? 'on' : pct >= 0.7 ? 'close' : 'behind'
 const goal = (actual, target) => { const t = Math.round(target || 0); const pct = t > 0 ? +(actual / t).toFixed(3) : null; return { actual, target: t, pct, state: state(pct) } }
 const ratio = (a, b) => b > 0 ? +(a / b).toFixed(3) : null

@@ -91,7 +91,11 @@ function ConcessionCard({ p, bucket }) {
         <Tile label="Reviews asked for" goal={g['Reviews asked for']} />
         <Tile label="Items sold" value={b['Items sold']} />
         <Tile label="Boots rented" value={b['Boots rented']} />
-        <Tile label="Field rentals" value={b['Field rentals hosted']} sub={`${b['Birthday parties hosted'] || 0} birthday parties`} />
+        {p.metrics.includes('Field rentals rented out') ? <>
+          <Tile label="Field rentals rented out" value={b['Field rentals rented out']} sub={`cash ${money(b['Field rental cash'] || 0)}`} />
+          <Tile label="Birthdays rented out" value={b['Birthdays rented out']} sub={`cash ${money(b['Birthday cash'] || 0)}`} />
+          <Tile label="Rental + birthday cash" value={(b['Field rental cash'] || 0) + (b['Birthday cash'] || 0)} moneyFmt />
+        </> : <Tile label="Field rentals" value={b['Field rentals hosted']} sub={`${b['Birthday parties hosted'] || 0} birthday parties`} />}
         <Tile label="Complaints" value={b.Complaints} />
       </div>
     </div>
