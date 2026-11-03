@@ -69,7 +69,7 @@ p { margin: 0.4rem 0 0.8rem; }
   .tabbar a { flex: 0 0 auto; flex-direction: row; gap: 10px; font-size: 0.9rem; width: 100%; padding: 9px 12px; }
   .tabbar a.active { background: var(--ink); }
   .tabbar a svg { width: 18px; height: 18px; }
-  .main { margin-left: 208px; max-width: 920px; }
+  .main { margin-left: 208px; width: calc(100% - 208px); max-width: 920px; min-width: 0; }
   .topbar { padding-left: 24px; }
 }
 
