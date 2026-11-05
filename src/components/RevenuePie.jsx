@@ -35,7 +35,7 @@ export default function RevenuePie({ sq, pp }) {
   return (
     <div className="card">
       <div className="row between wrap" style={{ gap: 8 }}>
-        <h3 style={{ margin: 0 }}>Revenue</h3>
+        <h3 style={{ margin: 0 }}>Where the money comes from</h3>
         <div className="row wrap" style={{ gap: 4 }}>{PERIODS.map(([k, l]) => <button key={k} className={`chip ${period === k ? 'on' : ''}`} onClick={() => { setPeriod(k); setHover(null) }}>{l}</button>)}</div>
       </div>
       {period === 'month' && rev && (

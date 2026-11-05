@@ -302,7 +302,7 @@ label.field span { display: block; font-size: 0.8rem; color: var(--muted); margi
 .goal .acts .input { width: 70px; min-height: 30px; padding: 4px 8px; font-size: 0.85rem; }
 
 /* ---------- CEO dashboard: glance strip, collapsible sections ---------- */
-.glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 14px 0 6px; }
+.glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)); gap: 8px; margin: 14px 0 6px; }
 .gtile { display: block; background: var(--panel); border: 1px solid var(--line); border-top: 2px solid var(--line-2); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; min-width: 0; transition: border-color .15s, transform .15s, background .15s; }
 .gtile:hover { border-color: var(--line-2); background: var(--ink); transform: translateY(-1px); }
 .gtile .label { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.02em; text-transform: uppercase; }
