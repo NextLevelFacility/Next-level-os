@@ -114,8 +114,8 @@ export default function Today() {
 
       <div className="card">
         <div className="row between wrap" style={{ gap: 8 }}>
-          <div><h2 style={{ margin: 0 }}>Need an answer?</h2><p className="muted small" style={{ margin: 0 }}>Ask Next Level knows every SOP and standard. Injuries get reported under Injury report.</p></div>
-          <div className="row" style={{ gap: 6 }}><Link className="btn ghost small" to="/reports">Injury report</Link><Link className="btn small" to="/ask">Ask</Link></div>
+          <div><h2 style={{ margin: 0 }}>Something happen?</h2><p className="muted small" style={{ margin: 0 }}>Injuries and incidents get reported under Injury report.</p></div>
+          <div className="row" style={{ gap: 6 }}><Link className="btn ghost small" to="/reports">Injury report</Link></div>
         </div>
       </div>
     </>

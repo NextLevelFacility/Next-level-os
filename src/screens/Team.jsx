@@ -107,9 +107,9 @@ export default function Team() {
                 {manager ? (
                   <div className="row wrap" style={{ gap: 6 }}>
                     <select className="input" style={{ width: 'auto', minHeight: 36, padding: '6px 10px' }} value={p.role} onChange={e => update(p.id, { role: e.target.value })}>{Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-                    <select className="input" style={{ width: 'auto', minHeight: 36, padding: '6px 10px' }} value={p.location_id || ''} onChange={e => update(p.id, { location_id: e.target.value })}>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>
+                    {locations.length > 1 && <select className="input" style={{ width: 'auto', minHeight: 36, padding: '6px 10px' }} value={p.location_id || ''} onChange={e => update(p.id, { location_id: e.target.value })}>{locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}</select>}
                   </div>
-                ) : <div className="row wrap" style={{ gap: 6 }}><span className="pill pink">{ROLES[p.role]}</span>{(p.roles || []).map(r => <span key={r} className="pill gold">+ {ROLES[r]}</span>)}<span className="pill">{locName(p.location_id)}</span></div>}
+                ) : <div className="row wrap" style={{ gap: 6 }}><span className="pill pink">{ROLES[p.role]}</span>{(p.roles || []).map(r => <span key={r} className="pill gold">+ {ROLES[r]}</span>)}{locations.length > 1 && <span className="pill">{locName(p.location_id)}</span>}</div>}
               </div>
               {manager && (
                 <div className="row wrap" style={{ gap: 6, marginTop: 8, alignItems: 'center' }}>

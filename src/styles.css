@@ -301,6 +301,63 @@ label.field span { display: block; font-size: 0.8rem; color: var(--muted); margi
 .goal .acts .btn.small { min-height: 30px; padding: 4px 10px; font-size: 0.8rem; }
 .goal .acts .input { width: 70px; min-height: 30px; padding: 4px 8px; font-size: 0.85rem; }
 
+/* ---------- CEO dashboard: glance strip, collapsible sections ---------- */
+.glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 14px 0 6px; }
+.gtile { display: block; background: var(--panel); border: 1px solid var(--line); border-top: 2px solid var(--line-2); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; min-width: 0; transition: border-color .15s, transform .15s, background .15s; }
+.gtile:hover { border-color: var(--line-2); background: var(--ink); transform: translateY(-1px); }
+.gtile .label { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.02em; text-transform: uppercase; }
+.gtile .value { font-family: var(--display); font-weight: 600; font-size: 1.5rem; line-height: 1.15; letter-spacing: -0.02em; margin-top: 4px; font-feature-settings: "tnum" 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gtile .value.text { font-size: 1.05rem; white-space: normal; line-height: 1.25; }
+.gtile .sub { font-size: 0.76rem; color: var(--muted); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gtile.gold { border-top-color: var(--gold); } .gtile.gold .value { color: var(--gold); }
+.gtile.good { border-top-color: var(--good); } .gtile.good .value { color: var(--good); }
+.gtile.bad { border-top-color: var(--bad); } .gtile.bad .sub { color: var(--bad); }
+
+.sec { margin-top: 14px; }
+.sec-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--ink); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; user-select: none; transition: border-color .15s; }
+.sec-head:hover { border-color: var(--line-2); }
+.sec.open .sec-head { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: transparent; background: linear-gradient(180deg, var(--ink), var(--panel)); }
+.sec-chev { color: var(--faint); font-size: 0.8rem; width: 12px; }
+.sec-title { font-family: var(--display); font-weight: 600; font-size: 0.98rem; letter-spacing: -0.01em; }
+.sec-sum { flex: 1; min-width: 0; font-size: 0.8rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sec-act { margin-left: auto; font-size: 0.82rem; }
+.sec-act a { color: var(--muted); } .sec-act a:hover { color: var(--text); }
+.sec-body { border: 1px solid var(--line); border-top: none; border-radius: 0 0 var(--radius) var(--radius); padding: 12px; }
+.sec-body > .card:last-child, .sec-body > .grid:last-child { margin-bottom: 0; }
+.sec-body .card { background: var(--black); }
+.sec-body .card .stat, .sec-body .stat { background: var(--panel); }
+.sec.bad .sec-head { border-color: rgba(229,72,77,0.4); }
+.sec.bad .sec-title::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); margin-left: 8px; vertical-align: middle; }
+.fold { margin-top: 8px; }
+.fold-t { cursor: pointer; color: var(--muted); } .fold-t:hover { color: var(--text); }
+
+/* calendar timeline */
+.evts li.evt { display: flex; align-items: flex-start; gap: 10px; padding: 9px 6px; border-bottom: 1px solid var(--line); border-radius: 6px; cursor: pointer; transition: background .12s; }
+.evts li.evt:hover { background: var(--ink); }
+.evt-time { min-width: 64px; font-size: 0.8rem; color: var(--muted); padding-top: 2px; font-feature-settings: "tnum" 1; }
+.evt-bar { width: 3px; align-self: stretch; border-radius: 2px; background: var(--line-2); flex-shrink: 0; }
+.evt-title { font-weight: 500; }
+.evt.done { opacity: 0.45; } .evt.done .evt-title { text-decoration: line-through; text-decoration-color: var(--faint); }
+.evt.now { background: var(--gold-soft); } .evt.now .evt-bar { background: var(--gold); } .evt.now .evt-time { color: var(--gold); font-weight: 600; }
+.evt.next .evt-bar { background: var(--text); } .evt.next .evt-time { color: var(--text); font-weight: 600; }
+.evt.allday .evt-bar { background: var(--line-2); }
+.evt-more { margin-top: 6px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+.evt-more a { color: var(--text); }
+.day-h { padding: 2px 6px; }
+
+/* tasks */
+.tasks li.task { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-bottom: 1px solid var(--line); border-radius: 6px; transition: background .12s; }
+.tasks li.task:hover { background: var(--ink); }
+.tasks li.task.done .grow { text-decoration: line-through; }
+.tasks .check { transition: background .12s, border-color .12s; }
+.tasks .check:hover { border-color: var(--text); }
+.task-acts { display: flex; gap: 4px; opacity: 0.55; }
+.tasks li.task:hover .task-acts { opacity: 1; }
+.task-acts .btn.small { min-height: 28px; padding: 3px 8px; font-size: 0.78rem; }
+.task-prog { display: flex; align-items: center; gap: 8px; min-width: 140px; }
+.task-prog .progress { flex: 1; height: 5px; }
+@media (hover: none) { .task-acts { opacity: 1; } }
+
 /* ---------- KPI tables ---------- */
 table.kpi { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 table.kpi th { text-align: right; font-weight: 500; color: var(--muted); font-size: 0.74rem; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }

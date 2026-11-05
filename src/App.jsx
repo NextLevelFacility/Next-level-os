@@ -10,7 +10,6 @@ import Dashboard from './screens/Dashboard.jsx'
 import Settings from './screens/Settings.jsx'
 import Method from './screens/Method.jsx'
 import ModulePage from './screens/ModulePage.jsx'
-import Ask from './screens/Ask.jsx'
 import Clinics from './screens/Clinics.jsx'
 import SopStudio from './screens/SopStudio.jsx'
 import SopPage from './screens/SopPage.jsx'
@@ -28,7 +27,7 @@ export const icons = {
   settings: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
 }
 
-// Two experiences: the Owner/Operator run the business from the CEO view; everyone else gets the SOPs and the assistant.
+// Two experiences: the Owner/Operator run the business from the CEO view; everyone else gets the SOPs.
 export default function App() {
   const { session, profile, roles, realRole, viewAs, setViewAs, previewing, signOut } = useAuth()
   const [more, setMore] = useState(false)
@@ -45,11 +44,11 @@ export default function App() {
     appointments: ['/appointments', 'Appointments', icons.clinics],
     clinics: ['/clinics', 'Clinics', icons.clinics],
     sops: ['/sops', 'SOP Studio', icons.playbook],
-    playbook: ['/playbook', manager ? 'Playbook' : 'SOPs', icons.playbook],
-    ask: ['/ask', 'Ask', icons.ask],
+    playbook: ['/playbook', 'SOPs', icons.playbook],
     settings: ['/settings', 'You', icons.settings],
   }
-  const ordered = manager ? ['ceo', 'appointments', 'clinics', 'sops', 'playbook', 'ask', 'settings'] : isDirector(roles) ? ['playbook', 'sops', 'ask', 'settings'] : ['playbook', 'ask', 'settings']
+  // The CEO runs the business from the dashboard; SOP Studio is where the SOPs are written. Staff live on the SOPs page.
+  const ordered = manager ? ['ceo', 'appointments', 'clinics', 'sops', 'settings'] : isDirector(roles) ? ['playbook', 'sops', 'settings'] : ['playbook', 'settings']
   const primary = ordered.slice(0, 4), extra = ordered.slice(4)
   const isExtraActive = extra.some(k => loc.pathname.startsWith(all[k][0]))
   const home = manager ? '/dashboard' : '/playbook'
@@ -89,7 +88,6 @@ export default function App() {
           <Route path="/sops" element={isDirector(roles) ? <SopStudio /> : <Navigate to="/playbook" />} />
           <Route path="/method" element={<Method />} />
           <Route path="/method/:id" element={<ModulePage />} />
-          <Route path="/ask" element={<Ask />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/dashboard" element={manager ? <Dashboard /> : <Navigate to="/playbook" />} />

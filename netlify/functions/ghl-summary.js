@@ -4,6 +4,8 @@ import { requireUser, json } from './_auth.js'
 import { cached } from './_cache.js'
 
 const BASE = 'https://services.leadconnectorhq.com'
+// The pipelines whose stages show on the CEO view (matched by name, case-insensitive)
+const WATCH_PIPELINES = [/soccer.*semi/i, /performance.*speed|speed.*performance/i]
 // Accepts the token and location id either in their own variables or pasted together into GHL_API_KEY.
 function creds() {
   const parts = (process.env.GHL_API_KEY || '').split(/[\s,;|]+/).filter(Boolean)
@@ -93,16 +95,19 @@ async function summary() {
 
   // Pipeline: open total, open per pipeline, stages of the main sales pipeline, won this month
   const pls = await pipelines()
-  let open = 0, byPipeline = [], byStage = [], wonMonth = 0, wonValue = 0, oppErr = null
+  let open = 0, byPipeline = [], byStage = [], stagesByPipeline = [], wonMonth = 0, wonValue = 0, oppErr = null
   try {
     open = (await oppCount('status=open')).total
     const perPipe = await Promise.all(pls.map(async p => [p.name, (await oppCount(`status=open&pipeline_id=${encodeURIComponent(p.id)}`)).total, p]))
     byPipeline = perPipe.map(([n, c]) => [n, c]).sort((a, b) => b[1] - a[1])
-    const main = perPipe.find(([n]) => /^sales/i.test(n))?.[2] || perPipe.sort((a, b) => b[1] - a[1])[0]?.[2]
-    if (main) {
-      const stages = await Promise.all((main.stages || []).slice(0, 12).map(async st => [st.name, (await oppCount(`status=open&pipeline_id=${encodeURIComponent(main.id)}&pipeline_stage_id=${encodeURIComponent(st.id)}`)).total]))
-      byStage = stages.map(([n, c]) => [`${main.name} · ${n}`, c])
-    }
+    // Stage breakdown for the pipelines the CEO actually runs: the soccer semi-private one and performance & speed.
+    const watched = perPipe.map(x => x[2]).filter(p => WATCH_PIPELINES.some(re => re.test(p.name)))
+    stagesByPipeline = await Promise.all(watched.map(async p => {
+      const stages = await Promise.all((p.stages || []).slice(0, 14).map(async st => [st.name.trim(), (await oppCount(`status=open&pipeline_id=${encodeURIComponent(p.id)}&pipeline_stage_id=${encodeURIComponent(st.id)}`)).total]))
+      return { name: p.name.trim(), open: stages.reduce((a, s) => a + s[1], 0), stages }
+    }))
+    stagesByPipeline.sort((a, b) => b.open - a.open)
+    byStage = stagesByPipeline.flatMap(p => p.stages.map(([n, c]) => [`${p.name} · ${n}`, c]))
     const won = await oppList(`status=won&date=${String(t.m).padStart(2, '0')}-01-${t.y}`, 2)   // GHL wants mm-dd-yyyy
     const wonM = won.filter(o => new Date(o.lastStatusChangeAt || o.updatedAt || o.createdAt) >= startMonth)
     wonMonth = wonM.length; wonValue = wonM.reduce((a, o) => a + (Number(o.monetaryValue) || 0), 0)
@@ -125,7 +130,7 @@ async function summary() {
   return {
     connected: true, location: locationName,
     leads: { today: today.total, week: week.total, month: month.total, sources: Object.entries(sources).sort((a, b) => b[1] - a[1]).slice(0, 8), newest },
-    pipeline: { open, byPipeline, byStage, wonMonth, wonValue, error: oppErr },
+    pipeline: { open, byPipeline, byStage, stagesByPipeline, wonMonth, wonValue, error: oppErr },
     appointments: {
       calendars: ap.calendars, today: todayAppts.length, upcoming7: next7.length,
       past7: stats(past7), next7: stats(next7), month: { ...mtd, showRate: decided ? Math.round(mtd.showed / decided * 100) : null },

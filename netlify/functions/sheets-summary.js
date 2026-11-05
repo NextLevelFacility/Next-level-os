@@ -85,7 +85,7 @@ function readTargets(rows, kind) {
 // ---------- rollup ----------
 const SALES = ['Calls', 'Meetings Today', 'Meetings Booked', 'Showed', 'Sold of showed', 'Upfront Cash Collected', 'Referrals']
 const COACH = ['Sessions trained', 'Total players trained']
-const CONC = ['Items sold', 'Boots rented', 'Field rentals hosted', 'Birthday parties hosted', 'Field rentals rented out', 'Field rental cash', 'Birthdays rented out', 'Birthday cash', 'Videos recorded', 'Insta stories posted', 'Bathroom cleaned (# times)', 'Complaints', 'Reviews asked for']
+const CONC = ['Items sold', 'Boots rented', 'Field rentals hosted', 'Birthday parties hosted', 'Field rentals rented out', 'Field rental cash', 'Birthdays rented out', 'Birthday cash', 'Paper cash collected', 'Paper cash in black box (EOD)', 'Videos recorded', 'Insta stories posted', 'Bathroom cleaned (# times)', 'Complaints', 'Reviews asked for']
 const state = (pct) => pct == null ? null : pct >= 1 ? 'on' : pct >= 0.7 ? 'close' : 'behind'
 const goal = (actual, target) => { const t = Math.round(target || 0); const pct = t > 0 ? +(actual / t).toFixed(3) : null; return { actual, target: t, pct, state: state(pct) } }
 const ratio = (a, b) => b > 0 ? +(a / b).toFixed(3) : null
@@ -113,7 +113,7 @@ function person(row, log, dash) {
     const ws = w.weekStarts.find((s, i) => d >= s && (i === 0 || d < w.weekStarts[i - 1]))
     if (ws) add(p.weeks[ws] = p.weeks[ws] || {})
     if (filled(r['Rate day 1-10'])) { if (d >= w.weekStart && d <= w.today) rated.week.push(num(r['Rate day 1-10'])); if (d >= w.monthStart && d <= w.today) rated.month.push(num(r['Rate day 1-10'])) }
-    if (checks.length) checkDays[d] = { pct: +(done.length / checks.length).toFixed(3), missed: checks.filter(c => !done.includes(c)).map(c => c.replace(/^✓\s*/, '')) }
+    if (checks.length) checkDays[d] = { pct: +(done.length / checks.length).toFixed(3), missed: checks.filter(c => !done.includes(c)).map(c => c.replace(/^✓\s*/, '')), done: done.map(c => c.replace(/^✓\s*/, '')) }
   }
   const avg = (xs) => xs.length ? +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(3) : null
   p.rateWeek = avg(rated.week); p.rateMonth = avg(rated.month)
@@ -141,7 +141,14 @@ function person(row, log, dash) {
   if (checks.length) {
     const days = Object.keys(checkDays)
     const wk = days.filter(d => d >= w.weekStart && d <= w.today), mo = days.filter(d => d >= w.monthStart && d <= w.today)
-    p.checklist = { items: checks.map(c => c.replace(/^✓\s*/, '')), today: checkDays[w.today] || null, weekAvg: avg(wk.map(d => checkDays[d].pct)), monthAvg: avg(mo.map(d => checkDays[d].pct)), recent: days.sort().slice(-7).map(d => [d, checkDays[d]]) }
+    const items = checks.map(c => c.replace(/^✓\s*/, ''))
+    // Per item: was it done today, and on how many of the logged shifts this week / month
+    const byItem = {}
+    for (const it of items) {
+      const t = checkDays[w.today]
+      byItem[it] = { today: t ? t.done.includes(it) : null, week: { done: wk.filter(d => checkDays[d].done.includes(it)).length, shifts: wk.length }, month: { done: mo.filter(d => checkDays[d].done.includes(it)).length, shifts: mo.length } }
+    }
+    p.checklist = { items, byItem, today: checkDays[w.today] || null, weekAvg: avg(wk.map(d => checkDays[d].pct)), monthAvg: avg(mo.map(d => checkDays[d].pct)), recent: days.sort().slice(-7).map(d => [d, checkDays[d]]) }
   }
   return p
 }

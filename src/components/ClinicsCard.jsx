@@ -14,14 +14,14 @@ export function useClinicGoals() {
 }
 export const goalFor = (c, goals) => goals.find(g => g.keyword && c.title.toLowerCase().includes(g.keyword.toLowerCase())) || goals.find(g => c.title.toLowerCase().includes(g.name.toLowerCase().replace(/ clinic| camp.*$/i, '').toLowerCase()))
 
-export default function ClinicsCard({ pp, full = false }) {
+export default function ClinicsCard({ pp, full = false, embedded = false }) {
   const goals = useClinicGoals()
   const [open, setOpen] = useState(null)
-  if (!pp) return <><h2>Clinics & camps · PushPress</h2><p className="muted">Loading…</p></>
+  if (!pp) return <>{!embedded && <h2>Clinics & camps · PushPress</h2>}<p className="muted">Loading…</p></>
   const list = (pp.clinics || []).filter(c => full || CLINIC_RE.test(c.title) || c.signups > 0).filter(c => phase(c) !== 'done' || full)
   return (
     <>
-      <div className="row between wrap"><h2 style={{ marginTop: 18 }}>Clinics & camps · PushPress</h2>{!full && <Link to="/clinics" className="small">Open</Link>}</div>
+      {!embedded && <div className="row between wrap"><h2 style={{ marginTop: 18 }}>Clinics & camps · PushPress</h2>{!full && <Link to="/clinics" className="small">Open</Link>}</div>}
       {pp.clinicErr && <p className="flag small">{pp.clinicErr}</p>}
       {list.length === 0 ? <div className="card"><p className="muted" style={{ margin: 0 }}>No upcoming clinic or camp events in PushPress. Create the event in PushPress (Calendar → Events) and sign-ups show here automatically.</p></div> : (
         <div className="card">

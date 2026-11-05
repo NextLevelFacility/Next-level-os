@@ -70,11 +70,27 @@ function CoachCard({ p, bucket }) {
   )
 }
 
+// One checklist item the owner wants to watch on its own (Dylan: Plei matches confirmed)
+function CheckItemTile({ label, item, bucket }) {
+  if (!item) return null
+  const span = bucket === 'month' ? item.month : item.week
+  const color = item.today == null ? 'var(--muted)' : item.today ? 'var(--good)' : 'var(--bad)'
+  return (
+    <div className="stat">
+      <div className="label">{label}</div>
+      <div className="value" style={{ color }}>{item.today == null ? '—' : item.today ? '✓ Done' : '✗ Not done'}</div>
+      <div className="small muted">{item.today == null ? 'not filled in yet today' : ''}{span.shifts ? `${item.today == null ? '· ' : ''}${span.done} of ${span.shifts} shifts this ${bucket === 'month' ? 'month' : 'week'}` : ''}</div>
+    </div>
+  )
+}
+
 function ConcessionCard({ p, bucket }) {
   const g = p.goals[bucket], b = p[bucket], c = p.checklist
   const today = c?.today
   const avgLabel = bucket === 'month' ? 'month' : 'week'
   const avg = bucket === 'month' ? c?.monthAvg : c?.weekAvg
+  const hasPaper = p.metrics.includes('Paper cash collected')
+  const paperIn = b['Paper cash collected'] || 0, paperBox = b['Paper cash in black box (EOD)'] || 0, paperDiff = paperIn - paperBox
   return (
     <div className="card">
       <PersonHeader p={p} />
@@ -85,6 +101,16 @@ function ConcessionCard({ p, bucket }) {
           <div className="small muted">{!today ? 'not filled in yet' : today.missed.length === 0 ? 'clean shift' : `missed: ${today.missed.slice(0, 3).join(', ')}${today.missed.length > 3 ? ` +${today.missed.length - 3}` : ''}`}</div>
         </div>
         <Tile label={`Checklist · ${avgLabel} average`} value={pct(avg)} sub="target 100%" />
+        <CheckItemTile label="Plei matches confirmed" item={c?.byItem?.['Plei matches confirmed']} bucket={bucket} />
+        {hasPaper && <>
+          <Tile label="Paper cash collected" value={paperIn} moneyFmt />
+          <Tile label="Paper cash in black box" value={paperBox} moneyFmt sub="end of day" />
+          <div className="stat">
+            <div className="label">Cash difference</div>
+            <div className="value" style={{ color: paperIn === 0 && paperBox === 0 ? 'var(--muted)' : paperDiff > 0 ? 'var(--bad)' : 'var(--good)' }}>{money(paperDiff)}</div>
+            <div className="small muted">{paperIn === 0 && paperBox === 0 ? 'nothing logged yet' : paperDiff > 0 ? 'collected but not in the box' : paperDiff < 0 ? 'more in the box than collected' : 'all cash accounted for'}</div>
+          </div>
+        </>}
         <Tile label="Videos recorded" goal={g['Videos recorded']} />
         <Tile label="Insta stories" goal={g['Insta stories posted']} />
         <Tile label="Bathroom cleans" goal={g['Bathroom cleaned (# times)']} />
@@ -147,7 +173,7 @@ function ManageSheets({ onChanged }) {
   )
 }
 
-export default function SheetsKpis({ sheets, onRefresh, owner }) {
+export default function SheetsKpis({ sheets, onRefresh, owner, embedded = false }) {
   const [bucket, setBucket] = useState('week')
   const [manage, setManage] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -160,8 +186,8 @@ export default function SheetsKpis({ sheets, onRefresh, owner }) {
   }
   return (
     <>
-      <div className="row between wrap" style={{ marginTop: 18, gap: 8 }}>
-        <h2 style={{ margin: 0 }}>Team KPIs · Google Sheets</h2>
+      <div className="row between wrap" style={{ marginTop: embedded ? 0 : 18, gap: 8 }}>
+        {embedded ? <span className="small muted">Live from each person's Google Sheet</span> : <h2 style={{ margin: 0 }}>Team KPIs · Google Sheets</h2>}
         <div className="row wrap" style={{ gap: 4 }}>
           {[['today', 'Today'], ['week', 'This week'], ['month', 'This month']].map(([k, l]) => <button key={k} className={`chip ${bucket === k ? 'on' : ''}`} onClick={() => setBucket(k)}>{l}</button>)}
           <button className="btn ghost small" disabled={busy} onClick={refresh}>{busy ? '…' : 'Refresh'}</button>
