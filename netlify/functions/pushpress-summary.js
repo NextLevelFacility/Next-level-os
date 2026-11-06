@@ -110,7 +110,16 @@ export const handler = async (event) => {
   let body = {}
   try { body = JSON.parse(event.body || '{}') } catch {}
   if (body.debug && ctx.profile && ['owner', 'operator'].includes(ctx.profile.role)) return json(200, await debug())
+  if (body.billing && ctx.profile && ['owner', 'operator'].includes(ctx.profile.role)) return json(200, await billingDebug())
   return json(200, await cached(ctx.sb, 'pushpress', () => summary(ctx.sb), { force: Boolean(body.force) }))
+}
+
+// Owner-only: billing cadence of every live plan (no names, no ids) so the revenue math can be checked.
+async function billingDebug() {
+  await probe()
+  const { list } = await listAll('/enrollments')
+  const rows = list.filter(e => !/cancel|complete/.test(norm(e.status))).map(e => ({ status: e.status, plan: planCache.get(e.planId)?.name || e.planId, period: e.billingSchedule?.period, interval: e.billingSchedule?.interval, start: e.startDate, last: e.lastCharge, next: e.nextCharge, paidUntil: e.paidUntil, end: e.endDate }))
+  return { count: rows.length, rows }
 }
 
 // Owner-only: which money endpoints this PushPress key can see (shape only, no values).
