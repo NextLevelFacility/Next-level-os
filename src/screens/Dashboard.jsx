@@ -50,8 +50,8 @@ function Glance({ sq, pp, ghl, sheets, cal }) {
   const monthTotal = sq?.connected && !sq.error ? (sq.month.sales || 0) + (pp?.revenue?.chargedMonth || 0) : null
   const tiles = [
     { id: 'sales', label: 'Sales today', value: sq ? (sq.connected && !sq.error ? money(sq.today.sales) : '—') : '…', sub: sq?.today ? `${sq.today.count} payments` : 'Square', tone: sq?.today?.sales > 0 ? 'good' : '' },
-    { id: 'revenue', label: 'Month to date', value: monthTotal == null ? (sq ? '—' : '…') : money(monthTotal), sub: 'Square + memberships billed', tone: 'gold' },
-    { id: 'members', label: 'Active members', value: pp ? (pp.connected && !pp.error ? (pp.active ?? pp.total ?? '—') : '—') : '…', sub: pp?.pending_cancel ? `${pp.pending_cancel} leaving · save them` : pp?.alerts ? `${pp.alerts} payment alerts` : 'paying, not paused', tone: pp?.pending_cancel || pp?.alerts ? 'bad' : '' },
+    { id: 'revenue', label: 'Month to date', value: monthTotal == null ? (sq ? '—' : '…') : money(monthTotal), sub: 'Square + memberships billed (est.)', tone: 'gold' },
+    { id: 'members', label: 'Active members', value: pp ? (pp.connected && !pp.error ? (pp.active ?? pp.total ?? '—') : '—') : '…', sub: pp?.pending_cancel ? `${pp.pending_cancel} leaving · save them` : pp?.alerts ? `${pp.alerts} payment alerts` : pp?.pushpress_members ? `paying · ${pp.pushpress_members} in PushPress incl. ${pp.paused || 0} paused` : 'paying, not paused', tone: pp?.pending_cancel || pp?.alerts ? 'bad' : '' },
     { id: 'leads', label: 'New leads today', value: ghl ? (ghl.connected && !ghl.error ? ghl.leads.today : '—') : '…', sub: ghl?.leads ? `${ghl.leads.week} this week · ${ghl.appointments?.today || 0} evals today` : 'GoHighLevel' },
     { id: 'team', label: 'Team KPIs today', value: sheets ? (people.length ? `${filled.length}/${people.length}` : '—') : '…', sub: !people.length ? 'filled in' : notYet.length ? `not yet: ${notYet.join(', ')}` : 'everyone filled in', tone: people.length && !notYet.length ? 'good' : notYet.length && new Date().getHours() >= 20 ? 'bad' : '' },
     { id: 'today', label: liveEv ? 'Happening now' : 'Next up', value: nextEv ? nextEv.title : cal ? (cal.connected ? 'Calendar clear' : '—') : '…', sub: nextEv ? nextEv.time : 'nothing else on the calendar today', tone: liveEv ? 'gold' : '', text: true },
@@ -166,6 +166,7 @@ export default function Dashboard() {
           <>
             <div className="grid">
               <Stat label="Active members" value={pp.active ?? pp.total ?? '—'} tone="gold" sub={pp.active_enrollments ? `paying, not paused · ${pp.active_enrollments} plans` : 'from PushPress'} />
+              {pp.pushpress_members != null && <Stat label="Members in PushPress" value={pp.pushpress_members} sub={`what PushPress calls "member" · includes ${pp.paused || 0} paused`} />}
               {pp.leads != null && <Stat label="Leads" value={pp.leads} sub="in PushPress · call list" />}
               {pp.cancellations_month != null && <Stat label="Cancelled this month" value={pp.cancellations_month} tone={pp.cancellations_month ? 'pink' : ''} sub="plans that ended" />}
               {pp.pending_cancel != null && <Stat label="Leaving" value={pp.pending_cancel} tone={pp.pending_cancel ? 'pink' : ''} sub="cancelled, still active · save them" />}
@@ -175,12 +176,16 @@ export default function Dashboard() {
             </div>
             {pp.revenue && (
               <div className="card">
-                <div className="row between wrap"><h3 style={{ marginTop: 0 }}>Membership revenue</h3><span className="small muted">active plans × monthly price</span></div>
+                <div className="row between wrap"><h3 style={{ marginTop: 0 }}>Membership revenue · estimated</h3><span className="small muted">PushPress charge dates × your price list</span></div>
                 <div className="grid">
-                  <Stat label="Monthly recurring" value={money(pp.revenue.mrr)} tone="gold" sub={`${pp.revenue.pricedPlans} priced plans${pp.revenue.unpricedPlans ? ` · ${pp.revenue.unpricedPlans} without a price` : ''}`} />
-                  <Stat label="Billed so far this month" value={money(pp.revenue.chargedMonth)} sub="plans charged since the 1st" />
-                  <Stat label="Still due this month" value={money(pp.revenue.dueRest)} sub="next charge dates ahead" />
+                  <Stat label="Billed so far this month" value={money(pp.revenue.chargedMonth)} tone="gold" sub={`${pp.revenue.chargesSoFar} charge${pp.revenue.chargesSoFar === 1 ? '' : 's'} since the 1st`} />
+                  <Stat label="Still due this month" value={money(pp.revenue.dueRest)} sub={`${pp.revenue.chargesDue} charge${pp.revenue.chargesDue === 1 ? '' : 's'} ahead`} />
+                  <Stat label="Expected this month" value={money(pp.revenue.expectedMonth)} sub="billed + still due" />
+                  <Stat label="Monthly recurring · regular price" value={money(pp.revenue.mrr)} sub={`${pp.revenue.billingPlans} billing plans${pp.revenue.unpricedPlans ? ` · ${pp.revenue.unpricedPlans} without a price` : ''}`} />
                 </div>
+                {pp.revenue.cadence && <div className="small muted" style={{ marginTop: 6 }}>How they bill: {Object.entries(pp.revenue.cadence).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${v} ${k}`).join(' · ')}</div>}
+                {pp.revenue.soon?.length > 0 && <Fold label={`Charging in the next 7 days (${pp.revenue.soon.length} · ${money(pp.revenue.soon.reduce((a, s) => a + (s.amount || 0), 0))})`}><ul className="list">{pp.revenue.soon.map((s, i) => <li key={i}><span className="pill">{new Date(s.at + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</span><span className="grow small">{s.name}<span className="muted"> · {s.plan} · {s.cycle}</span></span><b>{s.amount != null ? money(s.amount) : '—'}</b></li>)}</ul></Fold>}
+                <p className="small muted" style={{ margin: '10px 0 0' }}>PushPress's API shares who is on which plan and when each charge lands, not the dollar amounts. These use the plan prices below: the evaluation month at the first price, then the regular monthly price (a quarterly plan is charged three months at once).</p>
                 {role === 'owner' && <PlanPrices plans={pp.revenue.plansList} onSaved={() => callFn('pushpress-summary', { force: true }).then(setPp)} />}
               </div>
             )}
@@ -275,34 +280,51 @@ function Fold({ label, children }) {
   )
 }
 
-// Owner sets what each PushPress plan bills per month. Guessed from the plan name where it says 1x/2x/3x per week.
+// Owner sets what each PushPress plan bills: the first (evaluation) charge and the regular monthly price. Seeded from the price list by plan name.
 function PlanPrices({ plans, onSaved }) {
   const [open, setOpen] = useState(false)
-  const [vals, setVals] = useState({})
+  const [vals, setVals] = useState({})      // plan_id → { monthly_price?, first_price? }
+  const [evalMonths, setEvalMonths] = useState(null)
   const [saving, setSaving] = useState(false)
   if (!plans?.length) return null
   const missing = plans.filter(p => p.price == null && p.active > 0).length
+  const curEval = evalMonths ?? (plans.find(p => p.first != null)?.firstMonths ?? 1)
+  const set = (id, k, v) => setVals({ ...vals, [id]: { ...(vals[id] || {}), [k]: v } })
+  const num = (v) => v === '' || v == null ? null : Number(v)
   async function save() {
     setSaving(true)
-    const rows = Object.entries(vals).map(([plan_id, v]) => ({ plan_id, monthly_price: v === '' ? null : Number(v), updated_at: new Date().toISOString() }))
-    for (const r of rows) await supabase.from('plan_prices').update({ monthly_price: r.monthly_price, updated_at: r.updated_at }).eq('plan_id', r.plan_id)
-    setSaving(false); setVals({}); setOpen(false); onSaved?.()
+    const at = new Date().toISOString()
+    for (const [plan_id, v] of Object.entries(vals)) {
+      const patch = { updated_at: at }
+      if ('monthly_price' in v) patch.monthly_price = num(v.monthly_price)
+      if ('first_price' in v) patch.first_price = num(v.first_price)
+      await supabase.from('plan_prices').update(patch).eq('plan_id', plan_id)
+    }
+    if (evalMonths != null) await supabase.from('plan_prices').update({ first_months: Math.max(1, Number(evalMonths) || 1), updated_at: at }).not('first_price', 'is', null)
+    setSaving(false); setVals({}); setEvalMonths(null); setOpen(false); onSaved?.()
   }
+  const dirty = Object.keys(vals).length > 0 || evalMonths != null
   return (
     <div style={{ marginTop: 10 }}>
       <button className="btn ghost small" onClick={() => setOpen(!open)}>{open ? 'Close' : `Plan prices${missing ? ` · ${missing} to fill in` : ''}`}</button>
       {open && (
         <div style={{ marginTop: 10 }}>
+          <div className="row wrap" style={{ gap: 8, alignItems: 'center', marginBottom: 6 }}>
+            <span className="small muted">Evaluation period:</span>
+            <input className="input" type="number" min="1" max="12" style={{ width: 70, minHeight: 34, padding: '5px 8px' }} value={curEval} onChange={e => setEvalMonths(e.target.value)} />
+            <span className="small muted">month{Number(curEval) === 1 ? '' : 's'} at the first price, then the regular price. Session packs: put the pack price under "regular".</span>
+          </div>
           <ul className="list">
+            <li className="small muted" style={{ borderBottom: 'none', padding: '2px 0' }}><span className="grow">Plan</span><span style={{ width: 100, textAlign: 'center' }}>First charge</span><span style={{ width: 100, textAlign: 'center' }}>Then / month</span></li>
             {plans.map(p => (
               <li key={p.id}>
                 <span className="grow"><div className="small" style={{ fontWeight: 500 }}>{p.name}</div><div className="small muted">{p.active} active{p.category ? ` · ${p.category}` : ''}</div></span>
-                <span className="small muted">$</span>
-                <input className="input" type="number" inputMode="decimal" placeholder="/ month" style={{ width: 110, minHeight: 34, padding: '5px 8px' }} value={vals[p.id] ?? (p.price ?? '')} onChange={e => setVals({ ...vals, [p.id]: e.target.value })} />
+                <input className="input" type="number" inputMode="decimal" placeholder="same" title="First (evaluation) charge" style={{ width: 100, minHeight: 34, padding: '5px 8px' }} value={vals[p.id]?.first_price ?? (p.first ?? '')} onChange={e => set(p.id, 'first_price', e.target.value)} />
+                <input className="input" type="number" inputMode="decimal" placeholder="/ month" title="Regular monthly price" style={{ width: 100, minHeight: 34, padding: '5px 8px' }} value={vals[p.id]?.monthly_price ?? (p.price ?? '')} onChange={e => set(p.id, 'monthly_price', e.target.value)} />
               </li>
             ))}
           </ul>
-          <button className="btn small" disabled={saving || !Object.keys(vals).length} onClick={save}>{saving ? 'Saving…' : 'Save prices'}</button>
+          <button className="btn small" disabled={saving || !dirty} onClick={save}>{saving ? 'Saving…' : 'Save prices'}</button>
         </div>
       )}
     </div>

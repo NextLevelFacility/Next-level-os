@@ -76,7 +76,7 @@ export default function PayCard({ pp, sheets, ret, comp, roster, onCompSaved, on
       {pp?.memberships?.length > 0 && (
         <details style={{ marginTop: 8 }}>
           <summary className="small muted" style={{ cursor: 'pointer' }}>New memberships this month ({pp.memberships.filter(m => m.month === 'this').length}) and last month ({pp.memberships.filter(m => m.month === 'last').length})</summary>
-          <ul className="list">{pp.memberships.slice(0, 40).map((m, i) => <li key={i}><span className="grow small"><div>{m.name} <span className="muted">· {m.plan}</span></div><div className="muted">{new Date(m.started).toLocaleDateString()} · {m.staff}{m.semiPrivate ? '' : ' · not semi-private, no commission'}</div></span>{m.semiPrivate ? <span className="pill gold">{money(m.commission)}</span> : null}</li>)}</ul>
+          <ul className="list">{pp.memberships.slice(0, 40).map((m, i) => <li key={i}><span className="grow small"><div>{m.name} <span className="muted">· {m.plan}</span></div><div className="muted">{new Date(m.started).toLocaleDateString()} · {m.staff}{m.price != null ? ` · first charge ${money(m.price)}` : ' · no price set'}{m.cycle ? ` · ${m.cycle}` : ''}{m.semiPrivate ? '' : ' · not semi-private, no commission'}</div></span>{m.semiPrivate ? <span className="pill gold">{money(m.commission)}</span> : null}</li>)}</ul>
         </details>
       )}
       {editing && form && (

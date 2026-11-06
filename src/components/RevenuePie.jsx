@@ -21,8 +21,8 @@ export default function RevenuePie({ sq, pp }) {
   const slices = Object.entries(cats).map(([name, v]) => ({ name, amount: v.amount || 0, count: v.count || 0, src: 'Square' }))
   const rev = pp?.revenue
   if (period === 'month' && rev) {
-    const amt = members === 'billed' ? rev.chargedMonth : rev.mrr
-    slices.push({ name: members === 'billed' ? 'Memberships · billed so far' : 'Memberships · full month', amount: amt || 0, src: 'PushPress' })
+    const amt = members === 'billed' ? rev.chargedMonth : (rev.expectedMonth ?? rev.mrr)
+    slices.push({ name: members === 'billed' ? 'Memberships · billed so far (est.)' : 'Memberships · full month (est.)', amount: amt || 0, src: 'PushPress · price list' })
   }
   const list = slices.filter(s => s.amount > 0).sort((a, b) => b.amount - a.amount).map((s, i) => ({ ...s, color: COLORS[i % COLORS.length] }))
   const total = list.reduce((a, s) => a + s.amount, 0)
@@ -70,7 +70,7 @@ export default function RevenuePie({ sq, pp }) {
           </ul>
         </div>
       )}
-      <p className="small muted" style={{ marginBottom: 0 }}>{period === 'month' ? 'Square sales this month + PushPress memberships. ' : 'Square sales only — memberships bill monthly, see "This month". '}Tap a slice for its share.</p>
+      <p className="small muted" style={{ marginBottom: 0 }}>{period === 'month' ? 'Square sales this month + PushPress memberships (charge dates from PushPress × your price list). ' : 'Square sales only — memberships bill on their own cycles, see "This month". '}Tap a slice for its share.</p>
     </div>
   )
 }

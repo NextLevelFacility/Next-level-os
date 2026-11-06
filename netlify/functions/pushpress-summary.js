@@ -103,6 +103,25 @@ const planOf = (o) => {
 }
 const since = () => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d }
 
+// ---- billing cadence. PushPress tells us the schedule (month×1, day×29, month×3, week×1, once) and the charge dates, never the amounts.
+const DAY = 864e5
+const parseDay = (s) => { if (!s) return null; const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + 'T12:00:00' : s); return isNaN(d) ? null : d }
+const isOnce = (e) => norm(e.billingSchedule?.period) === 'once' || !e.billingSchedule?.period
+const cycleDays = (e) => { const b = e.billingSchedule || {}, n = Number(b.interval) || 0; switch (norm(b.period)) { case 'day': return n || 30; case 'week': return (n || 1) * 7; case 'month': return (n || 1) * 30.44; case 'year': return (n || 1) * 365.25; default: return 0 } }
+// How many months one charge pays for: a 28/29-day plan is a monthly plan, month×3 is a quarterly prepay, week×1 is a quarter of a month.
+const cycleMonths = (e) => { const b = e.billingSchedule || {}, n = Number(b.interval) || 0; switch (norm(b.period)) { case 'month': return n || 1; case 'year': return (n || 1) * 12; case 'week': return (n || 1) / 4.345; case 'day': return (n || 30) <= 31 ? 1 : n / 30.44; default: return 1 } }
+const cycleLabel = (e) => { const b = e.billingSchedule || {}, n = Number(b.interval) || 0; switch (norm(b.period)) { case 'month': return n <= 1 ? 'monthly' : `every ${n} months`; case 'year': return n <= 1 ? 'yearly' : `every ${n} years`; case 'week': return n <= 1 ? 'weekly' : `every ${n} weeks`; case 'day': return `every ${n || 30} days`; default: return 'one-time' } }
+const addMonths = (d, m) => { const x = new Date(d); x.setMonth(x.getMonth() + Math.floor(m)); if (m % 1) x.setDate(x.getDate() + Math.round((m % 1) * 30.44)); return x }
+// Charge dates of one enrollment inside [from, to]: the last charge, plus earlier ones for weekly plans; or the next charge(s) ahead.
+function chargesBetween(e, from, to) {
+  const out = [], cd = cycleDays(e)
+  const push = (d) => { if (d && d >= from && d <= to) out.push(d) }
+  const last = parseDay(e.lastCharge), next = parseDay(e.nextCharge)
+  if (last) { push(last); if (cd && cd < 20) { let d = new Date(last.getTime() - cd * DAY); for (let i = 0; i < 8 && d >= from; i++) { push(d); d = new Date(d.getTime() - cd * DAY) } } }
+  if (next && (!last || next > last)) { push(next); if (cd && cd < 20) { let d = new Date(next.getTime() + cd * DAY); for (let i = 0; i < 8 && d <= to; i++) { push(d); d = new Date(d.getTime() + cd * DAY) } } }
+  return out
+}
+
 export const handler = async (event) => {
   const ctx = await requireUser(event)
   if (!ctx) return json(401, { error: 'Sign in required' })
@@ -189,19 +208,33 @@ async function summary(sb) {
     }))
     const planLabel = (e) => planCache.get(e.planId)?.name || planOf(e) || (e.planId ? `Plan ${String(e.planId).slice(-6)}` : 'Member')
 
-    // Plan prices live in the app (PushPress has none). Seed new plans with a guess from the name (3x/2x/1x per week), the Owner edits the rest.
-    const guessPrice = (name = '') => { const m = name.match(/(\d)\s*x\s*\/?\s*week/i); if (!m) return null; return { 3: 720, 2: 560, 1: 360, 4: 880, 5: 1500 }[Number(m[1])] ?? null }
+    // Plan prices live in the app (PushPress's API has no amounts). The price list: semi-private 3x/2x/1x a week = $720/$560/$360 a month,
+    // with the first (evaluation) month at $997/$697/$497. New plans get seeded from the name; the Owner edits the rest.
+    const tier = (name = '') => { const m = name.match(/(\d)\s*\/?\s*x\s*\/?\s*(week|wk)/i) || name.match(/(\d)x/i); return m ? Number(m[1]) : null }
+    const guessPrice = (name = '') => ({ 3: 720, 2: 560, 1: 360, 4: 880, 5: 1500 }[tier(name)] ?? null)
+    const guessFirst = (name = '', category = '') => /semi.?private|foundation|athlete gym|soccer/i.test(name + ' ' + category) ? ({ 3: 997, 2: 697, 1: 497 }[tier(name)] ?? null) : null
     let prices = {}
     try {
-      const { data: rows } = await sb.from('plan_prices').select('plan_id, name, monthly_price')
+      const { data: rows } = await sb.from('plan_prices').select('plan_id, name, monthly_price, first_price, first_months')
       for (const r of rows || []) prices[r.plan_id] = r
-      const missing = [...planCache.entries()].filter(([id, pl]) => pl && !prices[id]).map(([id, pl]) => ({ plan_id: id, name: pl.name, category: pl.category, monthly_price: guessPrice(pl.name) }))
+      const missing = [...planCache.entries()].filter(([id, pl]) => pl && !prices[id]).map(([id, pl]) => ({ plan_id: id, name: pl.name, category: pl.category, monthly_price: guessPrice(pl.name), first_price: guessFirst(pl.name, pl.category), first_months: 1 }))
       if (missing.length) { const { error } = await sb.from('plan_prices').upsert(missing, { onConflict: 'plan_id' }); if (!error) for (const m of missing) prices[m.plan_id] = m }
     } catch {}
     const priceOf = (e) => { const v = prices[e.planId]?.monthly_price; return v == null || v === '' ? null : Number(v) }
     const enrName = (e) => nameOf(byId.get(e.customerId) || e.customer || e) || 'Member'
     const endOf = (e) => e.endDate ? new Date(e.endDate) : dateOf(e)
-    const monthStart = since(), now = new Date()
+    const monthStart = since(), now = new Date(), monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59)
+    const started = (e) => parseDay(e.startDate)
+    // What one charge on this date comes to: monthly price × months the cycle covers; the evaluation month(s) at the first price.
+    const amountOf = (e, on) => {
+      const p = prices[e.planId]; const m = priceOf(e); if (m == null) return null
+      if (isOnce(e)) return m                                   // session packs: the stored price is the pack price
+      const cm = cycleMonths(e), first = p?.first_price == null || p.first_price === '' ? null : Number(p.first_price), introMonths = Number(p?.first_months || 1)
+      const s = started(e)
+      const inIntro = first != null && s && on && on < new Date(addMonths(s, introMonths).getTime() - 3 * DAY)
+      if (!inIntro) return +(m * cm).toFixed(2)
+      return +(first * Math.min(cm, introMonths) + m * Math.max(0, cm - introMonths)).toFixed(2)
+    }
 
     const st = (e) => norm(e.status)
     // Active = paying and not paused (Gabriel's definition): plans in status 'active'. Paused and failed-payment plans are reported separately.
@@ -226,11 +259,11 @@ async function summary(sb) {
     //    Rule (Gabriel): sales earn 12% on new Soccer Semi-Private memberships only.
     const staffById = new Map(customers.filter(c => /coach|admin|staff|owner|manager/.test(norm(c.role))).map(c => [c.id, nameOf(c)]))
     const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const started = (e) => e.startDate ? new Date(e.startDate) : null
-    const memberships = enrollments.filter(e => started(e) && started(e) >= prevMonthStart && started(e) <= now).map(e => {
-      const c = byId.get(e.customerId); const plan = planLabel(e); const price = priceOf(e)
-      const semi = /semi.?private/i.test(plan) || /semi.?private/i.test(planCache.get(e.planId)?.category || '')
-      return { name: enrName(e), plan, price, started: e.startDate, month: started(e) >= monthStart ? 'this' : 'last', status: st(e), staff: staffById.get(c?.assignedToStaffId) || (c?.assignedToStaffId ? 'Unknown staff' : 'Unassigned'), semiPrivate: semi, commission: semi && price != null ? +(price * 0.12).toFixed(2) : 0 }
+    // A sale = a plan whose start date falls in the month (a start later this month counts: it was sold now). Sale value = the first charge.
+    const memberships = enrollments.filter(e => started(e) && started(e) >= prevMonthStart && started(e) <= monthEnd).map(e => {
+      const c = byId.get(e.customerId); const plan = planLabel(e); const price = amountOf(e, started(e))
+      const semi = /semi.?private|foundation/i.test(plan) || /semi.?private/i.test(planCache.get(e.planId)?.category || '')
+      return { name: enrName(e), plan, price, cycle: cycleLabel(e), started: e.startDate, month: started(e) >= monthStart ? 'this' : 'last', status: st(e), staff: staffById.get(c?.assignedToStaffId) || (c?.assignedToStaffId ? 'Unknown staff' : 'Unassigned'), semiPrivate: semi, commission: semi && price != null ? +(price * 0.12).toFixed(2) : 0 }
     }).sort((a, b) => String(b.started).localeCompare(String(a.started)))
     const byStaff = {}
     for (const m of memberships) { const k = m.staff; byStaff[k] = byStaff[k] || { this: { count: 0, semi: 0, sales: 0, commission: 0 }, last: { count: 0, semi: 0, sales: 0, commission: 0 } }; const b = byStaff[k][m.month]; b.count++; if (m.semiPrivate) { b.semi++; b.sales += m.price || 0; b.commission += m.commission } }
@@ -261,17 +294,32 @@ async function summary(sb) {
       connected: true,
       company: pr.company?.name || pr.company?.data?.name || null,
       active, total: customers.length, leads, ex_members: exMembers, cancelled_total: exMembers || canceled.length,
-      pushpress_members: members.length,
+      pushpress_members: members.length, pending_activation: enrollments.filter(e => /^pend.*activ/.test(st(e))).length,
       active_enrollments: running.length, paused: pausedIds.size, paused_plans: paused.length, alerts: alertIds.size,
       alert_list: alertList.slice(0, 20),
       plans: Object.entries(plans).sort((a, b) => b[1] - a[1]).slice(0, 12),
       revenue: (() => {
-        const priced = running.filter(e => priceOf(e) != null)
-        const mrr = priced.reduce((a, e) => a + priceOf(e), 0)
+        // Estimates: PushPress gives the charge dates and cadence of every plan, the app's price list gives the amounts.
+        const billing = running.filter(e => st(e) === 'active')           // paused and failed-payment plans don't bill
+        const priced = billing.filter(e => priceOf(e) != null)
+        const recurring = priced.filter(e => !isOnce(e))
+        const mrr = +recurring.reduce((a, e) => a + priceOf(e), 0).toFixed(2)   // regular monthly price, whatever the cadence
         const unpriced = [...new Set(running.filter(e => priceOf(e) == null).map(e => planLabel(e)))]
-        const chargedMonth = running.filter(e => e.lastCharge && new Date(e.lastCharge) >= monthStart && priceOf(e) != null).reduce((a, e) => a + priceOf(e), 0)
-        const dueRest = running.filter(e => e.nextCharge && new Date(e.nextCharge) >= now && new Date(e.nextCharge) <= new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59) && priceOf(e) != null).reduce((a, e) => a + priceOf(e), 0)
-        return { mrr, chargedMonth, dueRest, pricedPlans: priced.length, unpricedPlans: running.length - priced.length, unpriced, plansList: [...planCache.entries()].filter(([, pl]) => pl).map(([id, pl]) => ({ id, name: pl.name, category: pl.category, price: prices[id]?.monthly_price ?? null, active: running.filter(e => e.planId === id).length })).sort((a, b) => b.active - a.active) }
+        let chargedMonth = 0, chargesSoFar = 0, dueRest = 0, chargesDue = 0
+        const soon = []
+        for (const e of priced) {
+          for (const d of chargesBetween(e, monthStart, now)) { chargedMonth += amountOf(e, d) || 0; chargesSoFar++ }
+          for (const d of chargesBetween(e, new Date(now.getTime() + 1), monthEnd)) { dueRest += amountOf(e, d) || 0; chargesDue++ }
+        }
+        for (const e of billing) { const n = parseDay(e.nextCharge); if (n && n > now && n <= new Date(now.getTime() + 7 * DAY)) soon.push({ name: enrName(e), plan: planLabel(e), at: n.toISOString().slice(0, 10), amount: amountOf(e, n), cycle: cycleLabel(e) }) }
+        soon.sort((a, b) => a.at.localeCompare(b.at))
+        const cadence = {}
+        for (const e of billing) { const k = cycleLabel(e); cadence[k] = (cadence[k] || 0) + 1 }
+        return {
+          mrr, chargedMonth: +chargedMonth.toFixed(2), dueRest: +dueRest.toFixed(2), expectedMonth: +(chargedMonth + dueRest).toFixed(2), chargesSoFar, chargesDue,
+          billingPlans: billing.length, pricedPlans: priced.length, unpricedPlans: billing.length - priced.length, unpriced, cadence, soon: soon.slice(0, 30), estimated: true,
+          plansList: [...planCache.entries()].filter(([, pl]) => pl).map(([id, pl]) => ({ id, name: pl.name, category: pl.category, price: prices[id]?.monthly_price ?? null, first: prices[id]?.first_price ?? null, firstMonths: prices[id]?.first_months ?? 1, active: running.filter(e => e.planId === id).length })).sort((a, b) => b.active - a.active),
+        }
       })(),
       cancellations_month: cancelled.length,
       cancelled: cancelled.sort((a, b) => (b.at || '').localeCompare(a.at || '')).slice(0, 50),
