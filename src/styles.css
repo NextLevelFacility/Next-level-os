@@ -364,3 +364,17 @@ table.kpi th { text-align: right; font-weight: 500; color: var(--muted); font-si
 table.kpi th:first-child, table.kpi td:first-child { text-align: left; padding-left: 0; }
 table.kpi td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 table.kpi tr:last-child td { border-bottom: none; }
+
+/* Staff files */
+.staff-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.staff-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; cursor: pointer; font: inherit; color: inherit; margin: 0; }
+.staff-card:hover { border-color: var(--line-2); background: var(--ink); }
+.staff-name { font-weight: 600; margin-top: 6px; }
+.staff-photo { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; background: var(--ink); border: 1px solid var(--line-2); }
+.staff-photo.lg { width: 120px; height: 120px; flex: none; }
+.staff-ph { display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 600; font-size: 1.4rem; }
+.staff-head { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.staff-field { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.staff-field:last-child { border-bottom: none; }
+.staff-files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.staff-thumb { width: 160px; max-height: 200px; object-fit: contain; border-radius: 8px; border: 1px solid var(--line-2); background: #fff; }

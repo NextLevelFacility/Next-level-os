@@ -14,6 +14,7 @@ import Clinics from './screens/Clinics.jsx'
 import SopStudio from './screens/SopStudio.jsx'
 import SopPage from './screens/SopPage.jsx'
 import Appointments from './screens/Appointments.jsx'
+import Staff from './screens/Staff.jsx'
 
 const Icon = ({ d }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
 export const icons = {
@@ -22,6 +23,7 @@ export const icons = {
   dashboard: 'M3 3v18h18M7 14l4-4 4 4 5-6',
   method: 'M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2zM22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z',
   ask: 'M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.4 8.4 0 013.8-.9h.5a8.5 8.5 0 018 8v.5z',
+  staff: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.9M16 3.1a4 4 0 010 7.8',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   clinics: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2zM9 15l2 2 4-4',
   settings: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
@@ -43,12 +45,14 @@ export default function App() {
     ceo: ['/dashboard', 'CEO', icons.dashboard],
     appointments: ['/appointments', 'Appointments', icons.clinics],
     clinics: ['/clinics', 'Clinics', icons.clinics],
+    staff: ['/staff', 'Staff', icons.staff],
     sops: ['/sops', 'SOP Studio', icons.playbook],
     playbook: ['/playbook', 'SOPs', icons.playbook],
     settings: ['/settings', 'You', icons.settings],
   }
   // The CEO runs the business from the dashboard; SOP Studio is where the SOPs are written. Staff live on the SOPs page.
-  const ordered = manager ? ['ceo', 'appointments', 'clinics', 'sops', 'settings'] : isDirector(roles) ? ['playbook', 'sops', 'settings'] : ['playbook', 'settings']
+  const owner = roles.includes('owner')
+  const ordered = manager ? ['ceo', 'appointments', 'clinics', ...(owner ? ['staff'] : []), 'sops', 'settings'] : isDirector(roles) ? ['playbook', 'sops', 'settings'] : ['playbook', 'settings']
   const primary = ordered.slice(0, 4), extra = ordered.slice(4)
   const isExtraActive = extra.some(k => loc.pathname.startsWith(all[k][0]))
   const home = manager ? '/dashboard' : '/playbook'
@@ -92,6 +96,7 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/dashboard" element={manager ? <Dashboard /> : <Navigate to="/playbook" />} />
           <Route path="/appointments" element={manager ? <Appointments /> : <Navigate to="/playbook" />} />
+          <Route path="/staff" element={roles.includes('owner') ? <Staff /> : <Navigate to={home} />} />
           <Route path="/clinics" element={manager ? <Clinics /> : <Navigate to="/playbook" />} />
           <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
